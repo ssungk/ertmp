@@ -44,7 +44,7 @@ func (r *Reader) readChunk() (uint32, error) {
 	// Read basic header
 	basicHeader, err := readBasicHeader(r.reader)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read basic header: %w", err)
+		return 0, fmt.Errorf("chunk basic header: %w: %w", ErrRtmpRead, err)
 	}
 
 	// 청크 스트림 획득 또는 생성
@@ -53,7 +53,7 @@ func (r *Reader) readChunk() (uint32, error) {
 	// fmt에 따라 메시지 헤더 읽기
 	msgHeader, err := readMessageHeader(r.reader, basicHeader.fmt, &cs.PrevHeader)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read message header: %w", err)
+		return 0, fmt.Errorf("chunk message header: %w: %w", ErrRtmpRead, err)
 	}
 
 	// 새 메시지 시작: 헤더 갱신
@@ -71,7 +71,7 @@ func (r *Reader) readChunk() (uint32, error) {
 	// 청크 데이터 읽기 (버퍼 풀 사용, 제로 카피)
 	buf, err := ReadChunkData(r.reader, int(chunkDataSize))
 	if err != nil {
-		return 0, fmt.Errorf("failed to read chunk data: %w", err)
+		return 0, fmt.Errorf("chunk data: %w: %w", ErrRtmpRead, err)
 	}
 
 	// 메시지 버퍼에 추가 (복사 없이 버퍼 참조만 저장)
@@ -224,7 +224,7 @@ func ReadChunkData(reader io.Reader, size int) ([]byte, error) {
 	_, err := io.ReadFull(reader, buf)
 	if err != nil {
 		PutBuffer(buf)
-		return nil, fmt.Errorf("failed to read %d bytes: %w", size, err)
+		return nil, fmt.Errorf("read %d bytes: %w: %w", size, ErrRtmpRead, err)
 	}
 
 	return buf, nil

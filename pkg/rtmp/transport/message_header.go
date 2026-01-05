@@ -2,12 +2,7 @@ package transport
 
 import (
 	"encoding/binary"
-	"errors"
 	"io"
-)
-
-var (
-	ErrNoPreviousHeader = errors.New("format type requires previous header")
 )
 
 // MessageHeader represents the message header

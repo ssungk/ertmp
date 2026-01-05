@@ -26,13 +26,13 @@ func TestClientHandshake(t *testing.T) {
 	testClientHandshake(t, h0, h1, noLimit, noLimit, nil)
 
 	// Error cases
-	testClientHandshake(t, h0, h1, noLimit, failImmediately, ErrWrite)         // C0 write fails
-	testClientHandshake(t, h0, h1, noLimit, failAfterVersion, ErrWrite)        // C1 write fails
-	testClientHandshake(t, h0, h1, failImmediately, noLimit, ErrRead)          // S0 read fails
+	testClientHandshake(t, h0, h1, noLimit, failImmediately, ErrRtmpWrite)         // C0 write fails
+	testClientHandshake(t, h0, h1, noLimit, failAfterVersion, ErrRtmpWrite)        // C1 write fails
+	testClientHandshake(t, h0, h1, failImmediately, noLimit, ErrRtmpRead)          // S0 read fails
 	testClientHandshake(t, i0, h1, failAfterVersion, noLimit, ErrUnsupportedVersion) // S0 unsupported version
-	testClientHandshake(t, h0, h1, failAfterVersion, noLimit, ErrRead)         // S1 read fails
-	testClientHandshake(t, h0, h1, failAfterC0C1, noLimit, ErrRead)            // S2 read fails (readLimit)
-	testClientHandshake(t, h0, h1, noLimit, failAfterC0C1, ErrWrite)           // C2 write fails
+	testClientHandshake(t, h0, h1, failAfterVersion, noLimit, ErrRtmpRead)         // S1 read fails
+	testClientHandshake(t, h0, h1, failAfterC0C1, noLimit, ErrRtmpRead)            // S2 read fails (readLimit)
+	testClientHandshake(t, h0, h1, noLimit, failAfterC0C1, ErrRtmpWrite)           // C2 write fails
 }
 
 func TestServerHandshake(t *testing.T) {
@@ -40,13 +40,13 @@ func TestServerHandshake(t *testing.T) {
 	testServerHandshake(t, h0, h1, noLimit, noLimit, nil)
 
 	// Error cases
-	testServerHandshake(t, h0, h1, failImmediately, noLimit, ErrRead)          // C0 read fails
+	testServerHandshake(t, h0, h1, failImmediately, noLimit, ErrRtmpRead)          // C0 read fails
 	testServerHandshake(t, i0, h1, failAfterVersion, noLimit, ErrUnsupportedVersion) // C0 unsupported version
-	testServerHandshake(t, h0, h1, failAfterVersion, noLimit, ErrRead)         // C1 read fails
-	testServerHandshake(t, h0, h1, noLimit, failImmediately, ErrWrite)         // S0 write fails
-	testServerHandshake(t, h0, h1, noLimit, failAfterVersion, ErrWrite)        // S1 write fails
-	testServerHandshake(t, h0, h1, noLimit, failAfterC0C1, ErrWrite)           // S2 write fails
-	testServerHandshake(t, h0, h1, failAfterC0C1, noLimit, ErrRead)            // C2 read fails (readLimit)
+	testServerHandshake(t, h0, h1, failAfterVersion, noLimit, ErrRtmpRead)         // C1 read fails
+	testServerHandshake(t, h0, h1, noLimit, failImmediately, ErrRtmpWrite)         // S0 write fails
+	testServerHandshake(t, h0, h1, noLimit, failAfterVersion, ErrRtmpWrite)        // S1 write fails
+	testServerHandshake(t, h0, h1, noLimit, failAfterC0C1, ErrRtmpWrite)           // S2 write fails
+	testServerHandshake(t, h0, h1, failAfterC0C1, noLimit, ErrRtmpRead)            // C2 read fails (readLimit)
 }
 
 func testClientHandshake(t *testing.T, s0, s1 []byte, readLimit, writeLimit int, wantErr error) {
