@@ -67,12 +67,12 @@ func (w *Writer) WriteMessage(msg *Message) error {
 			// 기본 헤더 작성
 			basicHeader := newBasicHeader(fmtType, csid)
 			if _, err := basicHeader.WriteTo(w.writer); err != nil {
-				return err
+				return fmt.Errorf("chunk basic header: %w: %w", ErrRtmpWrite, err)
 			}
 
 			// 메시지 헤더 작성
 			if _, err := msg.Header.WriteTo(w.writer, fmtType); err != nil {
-				return err
+				return fmt.Errorf("chunk message header: %w: %w", ErrRtmpWrite, err)
 			}
 
 			isFirstChunk = false
@@ -80,14 +80,14 @@ func (w *Writer) WriteMessage(msg *Message) error {
 			// 연속 헤더 작성 (fmt 3)
 			basicHeader := newBasicHeader(FmtType3, csid)
 			if _, err := basicHeader.WriteTo(w.writer); err != nil {
-				return err
+				return fmt.Errorf("chunk continuation header: %w: %w", ErrRtmpWrite, err)
 			}
 		}
 
 		// 청크 데이터 작성
 		chunkData := data[bytesWritten : bytesWritten+chunkDataSize]
 		if _, err := w.writer.Write(chunkData); err != nil {
-			return err
+			return fmt.Errorf("chunk data: %w: %w", ErrRtmpWrite, err)
 		}
 
 		bytesWritten += chunkDataSize
