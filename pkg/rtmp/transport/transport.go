@@ -8,17 +8,15 @@ import (
 
 // Transport represents a bidirectional RTMP protocol handler
 type Transport struct {
-	netConn       net.Conn
-	conn          *meteredConn
-	reader        *Reader
-	writer        *Writer
+	netConn net.Conn
+	conn    *meteredConn
+	reader  *Reader
+	writer  *Writer
 
 	// 프로토콜 제어
 	windowAckSize uint32
 	peerBandwidth uint32
-
-	// TODO: Acknowledgement 자동 전송 구현
-	// - windowAckSize 기준으로 자동 전송
+	lastAckSent   uint64
 }
 
 // NewTransport creates a new Transport
@@ -29,7 +27,7 @@ func NewTransport(conn net.Conn) *Transport {
 		conn:          mc,
 		reader:        NewReader(mc),
 		writer:        NewWriter(mc),
-		windowAckSize: 2500000, // 기본 2.5MB
+		windowAckSize: 0,
 	}
 }
 
@@ -40,16 +38,13 @@ func (t *Transport) ReadMessage() (*Message, error) {
 		return nil, err
 	}
 
-	// 프로토콜 제어 메시지 자동 처리
 	if err := t.handleProtocolControl(msg); err != nil {
 		return nil, err
 	}
 
-	// TODO: Acknowledgement 자동 전송
-	// bytesRead := t.conn.BytesRead()
-	// if t.windowAckSize > 0 && bytesRead-t.lastAckSent >= t.windowAckSize {
-	//     sendAcknowledgement(bytesRead)
-	// }
+	if err := t.handleAckWindow(); err != nil {
+		return nil, err
+	}
 
 	return msg, nil
 }
@@ -93,9 +88,41 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 	return nil
 }
 
-// TODO: sendAcknowledgement 구현
-// - windowAckSize 기준으로 자동 전송
-// - t.conn.BytesRead() 사용
+// handleAckWindow sends acknowledgement if needed based on windowAckSize
+func (t *Transport) handleAckWindow() error {
+	if t.windowAckSize == 0 {
+		return nil
+	}
+
+	bytesRead := t.conn.BytesRead()
+
+	// Send multiple ACKs if we've crossed multiple window boundaries
+	// This handles cases where a large message spans multiple windows
+	for bytesRead-t.lastAckSent >= uint64(t.windowAckSize) {
+		t.lastAckSent += uint64(t.windowAckSize)
+		if err := t.sendAcknowledgement(t.lastAckSent); err != nil {
+			return fmt.Errorf("send acknowledgement: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// sendAcknowledgement sends an acknowledgement message
+func (t *Transport) sendAcknowledgement(bytesRead uint64) error {
+	// RTMP ACK message uses uint32 (4 bytes)
+	ackBytes := uint32(bytesRead) // uint64 to uint32, wrap-around is expected
+
+	// Create 4-byte payload
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, ackBytes)
+
+	// Create ACK message (StreamID=0, Timestamp=0, TypeID=Acknowledgement)
+	msg := NewMessage(0, 0, MsgTypeAcknowledgement, payload)
+
+	// Send message
+	return t.WriteMessage(msg)
+}
 
 // SetInChunkSize sets the incoming chunk size
 func (t *Transport) SetInChunkSize(size uint32) error {
