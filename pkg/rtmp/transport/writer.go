@@ -1,22 +1,20 @@
 package transport
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 )
 
 // Writer writes RTMP messages to a stream
 type Writer struct {
-	writer       *bufio.Writer
+	conn         *meteredConn
 	chunkStreams map[uint32]*ChunkStream
 	chunkSize    uint32
 }
 
 // NewWriter creates a new RTMP writer
-func NewWriter(w io.Writer) *Writer {
+func NewWriter(mc *meteredConn) *Writer {
 	return &Writer{
-		writer:       bufio.NewWriterSize(w, IOBufferSize),
+		conn:         mc,
 		chunkStreams: make(map[uint32]*ChunkStream),
 		chunkSize:    DefaultChunkSize,
 	}
@@ -66,12 +64,12 @@ func (w *Writer) WriteMessage(msg *Message) error {
 		if isFirstChunk {
 			// 기본 헤더 작성
 			basicHeader := newBasicHeader(fmtType, csid)
-			if _, err := basicHeader.WriteTo(w.writer); err != nil {
+			if _, err := basicHeader.WriteTo(w.conn); err != nil {
 				return fmt.Errorf("chunk basic header: %w: %w", ErrRtmpWrite, err)
 			}
 
 			// 메시지 헤더 작성
-			if _, err := msg.Header.WriteTo(w.writer, fmtType); err != nil {
+			if _, err := msg.Header.WriteTo(w.conn, fmtType); err != nil {
 				return fmt.Errorf("chunk message header: %w: %w", ErrRtmpWrite, err)
 			}
 
@@ -79,14 +77,14 @@ func (w *Writer) WriteMessage(msg *Message) error {
 		} else {
 			// 연속 헤더 작성 (fmt 3)
 			basicHeader := newBasicHeader(FmtType3, csid)
-			if _, err := basicHeader.WriteTo(w.writer); err != nil {
+			if _, err := basicHeader.WriteTo(w.conn); err != nil {
 				return fmt.Errorf("chunk continuation header: %w: %w", ErrRtmpWrite, err)
 			}
 		}
 
 		// 청크 데이터 작성
 		chunkData := data[bytesWritten : bytesWritten+chunkDataSize]
-		if _, err := w.writer.Write(chunkData); err != nil {
+		if _, err := w.conn.Write(chunkData); err != nil {
 			return fmt.Errorf("chunk data: %w: %w", ErrRtmpWrite, err)
 		}
 
@@ -101,7 +99,12 @@ func (w *Writer) WriteMessage(msg *Message) error {
 
 // Flush flushes the writer
 func (w *Writer) Flush() error {
-	return w.writer.Flush()
+	return w.conn.Flush()
+}
+
+// BytesWritten returns the total number of bytes written to the socket
+func (w *Writer) BytesWritten() uint64 {
+	return w.conn.BytesWritten()
 }
 
 // determineFormatType determines the optimal format type
@@ -150,10 +153,10 @@ func (w *Writer) getChunkStream(id uint32) *ChunkStream {
 
 // WriteByte writes a single byte
 func (w *Writer) WriteByte(b byte) error {
-	return w.writer.WriteByte(b)
+	return w.conn.WriteByte(b)
 }
 
 // Write writes data
 func (w *Writer) Write(p []byte) (int, error) {
-	return w.writer.Write(p)
+	return w.conn.Write(p)
 }

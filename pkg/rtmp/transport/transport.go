@@ -8,26 +8,27 @@ import (
 
 // Transport represents a bidirectional RTMP protocol handler
 type Transport struct {
-	conn   net.Conn
-	reader *Reader
-	writer *Writer
+	netConn       net.Conn
+	conn          *meteredConn
+	reader        *Reader
+	writer        *Writer
 
 	// 프로토콜 제어
 	windowAckSize uint32
 	peerBandwidth uint32
 
-	// TODO: bytesRead/bytesWritten 구현
-	// - Reader/Writer에서 실제 소켓 read/write 바이트 수를 추적해야 함
-	// - 청크 헤더, 프로토콜 오버헤드 모두 포함
-	// - windowAckSize 기준으로 자동 Acknowledgement 전송
+	// TODO: Acknowledgement 자동 전송 구현
+	// - windowAckSize 기준으로 자동 전송
 }
 
 // NewTransport creates a new Transport
 func NewTransport(conn net.Conn) *Transport {
+	mc := newMeteredConn(conn)
 	return &Transport{
-		conn:          conn,
-		reader:        NewReader(conn),
-		writer:        NewWriter(conn),
+		netConn:       conn,
+		conn:          mc,
+		reader:        NewReader(mc),
+		writer:        NewWriter(mc),
 		windowAckSize: 2500000, // 기본 2.5MB
 	}
 }
@@ -44,9 +45,10 @@ func (t *Transport) ReadMessage() (*Message, error) {
 		return nil, err
 	}
 
-	// TODO: bytesRead 추적 및 Acknowledgement 자동 전송
-	// if t.windowAckSize > 0 && t.bytesRead-t.lastAckSent >= t.windowAckSize {
-	//     sendAcknowledgement(t.bytesRead)
+	// TODO: Acknowledgement 자동 전송
+	// bytesRead := t.conn.BytesRead()
+	// if t.windowAckSize > 0 && bytesRead-t.lastAckSent >= t.windowAckSize {
+	//     sendAcknowledgement(bytesRead)
 	// }
 
 	return msg, nil
@@ -57,8 +59,6 @@ func (t *Transport) WriteMessage(msg *Message) error {
 	if err := t.writer.WriteMessage(msg); err != nil {
 		return err
 	}
-
-	// TODO: bytesWritten 추적
 
 	// 자동 Flush
 	return t.writer.Flush()
@@ -94,8 +94,8 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 }
 
 // TODO: sendAcknowledgement 구현
-// - bytesRead 추적이 완료되면 구현
 // - windowAckSize 기준으로 자동 전송
+// - t.conn.BytesRead() 사용
 
 // SetInChunkSize sets the incoming chunk size
 func (t *Transport) SetInChunkSize(size uint32) error {
@@ -109,5 +109,5 @@ func (t *Transport) SetOutChunkSize(size uint32) error {
 
 // Close closes the transport
 func (t *Transport) Close() error {
-	return t.conn.Close()
+	return t.netConn.Close()
 }
