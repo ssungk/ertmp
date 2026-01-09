@@ -3,15 +3,15 @@ package transport
 import (
 	"encoding/binary"
 	"fmt"
-	"net"
+	"io"
 )
 
 // Transport represents a bidirectional RTMP protocol handler
 type Transport struct {
-	netConn net.Conn
-	conn    *meteredConn
-	reader  *Reader
-	writer  *Writer
+	rwc    io.ReadWriteCloser
+	conn   *meteredConn
+	reader *Reader
+	writer *Writer
 
 	// 프로토콜 제어
 	windowAckSize uint32
@@ -20,10 +20,10 @@ type Transport struct {
 }
 
 // NewTransport creates a new Transport
-func NewTransport(conn net.Conn) *Transport {
-	mc := newMeteredConn(conn)
+func NewTransport(rwc io.ReadWriteCloser) *Transport {
+	mc := newMeteredConn(rwc)
 	return &Transport{
-		netConn:       conn,
+		rwc:           rwc,
 		conn:          mc,
 		reader:        NewReader(mc),
 		writer:        NewWriter(mc),
@@ -136,5 +136,5 @@ func (t *Transport) SetOutChunkSize(size uint32) error {
 
 // Close closes the transport
 func (t *Transport) Close() error {
-	return t.netConn.Close()
+	return t.rwc.Close()
 }
