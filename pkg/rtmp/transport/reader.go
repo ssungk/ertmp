@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,15 +10,15 @@ import (
 
 // Reader reads RTMP messages from a stream
 type Reader struct {
-	reader       *bufio.Reader
+	conn         *meteredConn
 	chunkStreams map[uint32]*ChunkStream
 	chunkSize    uint32
 }
 
 // NewReader creates a new RTMP reader
-func NewReader(r io.Reader) *Reader {
+func NewReader(mc *meteredConn) *Reader {
 	return &Reader{
-		reader:       bufio.NewReaderSize(r, IOBufferSize),
+		conn:         mc,
 		chunkStreams: make(map[uint32]*ChunkStream),
 		chunkSize:    DefaultChunkSize,
 	}
@@ -42,7 +41,7 @@ func (r *Reader) ReadMessage() (*Message, error) {
 // readChunk reads a single chunk and accumulates data in chunk streams
 func (r *Reader) readChunk() (uint32, error) {
 	// Read basic header
-	basicHeader, err := readBasicHeader(r.reader)
+	basicHeader, err := readBasicHeader(r.conn)
 	if err != nil {
 		return 0, fmt.Errorf("chunk basic header: %w: %w", ErrRtmpRead, err)
 	}
@@ -51,7 +50,7 @@ func (r *Reader) readChunk() (uint32, error) {
 	cs := r.getChunkStream(basicHeader.chunkStreamID)
 
 	// fmt에 따라 메시지 헤더 읽기
-	msgHeader, err := readMessageHeader(r.reader, basicHeader.fmt, &cs.PrevHeader)
+	msgHeader, err := readMessageHeader(r.conn, basicHeader.fmt, &cs.PrevHeader)
 	if err != nil {
 		return 0, fmt.Errorf("chunk message header: %w: %w", ErrRtmpRead, err)
 	}
@@ -69,7 +68,7 @@ func (r *Reader) readChunk() (uint32, error) {
 	}
 
 	// 청크 데이터 읽기 (버퍼 풀 사용, 제로 카피)
-	buf, err := ReadChunkData(r.reader, int(chunkDataSize))
+	buf, err := ReadChunkData(r.conn, int(chunkDataSize))
 	if err != nil {
 		return 0, fmt.Errorf("chunk data: %w: %w", ErrRtmpRead, err)
 	}
@@ -133,19 +132,24 @@ func (r *Reader) getChunkStream(id uint32) *ChunkStream {
 	return cs
 }
 
+// BytesRead returns the total number of bytes read from the socket
+func (r *Reader) BytesRead() uint64 {
+	return r.conn.BytesRead()
+}
+
 // ReadByte reads a single byte
 func (r *Reader) ReadByte() (byte, error) {
-	return r.reader.ReadByte()
+	return r.conn.ReadByte()
 }
 
 // Read reads data into a buffer
 func (r *Reader) Read(p []byte) (int, error) {
-	return r.reader.Read(p)
+	return r.conn.Read(p)
 }
 
 // ReadFull reads exactly len(p) bytes
 func (r *Reader) ReadFull(p []byte) error {
-	_, err := io.ReadFull(r.reader, p)
+	_, err := io.ReadFull(r.conn, p)
 	return err
 }
 
