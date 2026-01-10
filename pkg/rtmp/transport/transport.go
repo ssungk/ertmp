@@ -64,23 +64,45 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 	switch msg.Type() {
 	case MsgTypeSetChunkSize:
 		if len(msg.Data()) != 4 {
-			return fmt.Errorf("invalid SetChunkSize message length")
+			return fmt.Errorf("invalid SetChunkSize message length: expected 4, got %d", len(msg.Data()))
 		}
 		size := binary.BigEndian.Uint32(msg.Data()) & 0x7FFFFFFF
-		if size > MaxChunkSize {
-			return fmt.Errorf("chunk size %d exceeds maximum", size)
+
+		return t.reader.SetChunkSize(size)
+
+	case MsgTypeAbort:
+		if len(msg.Data()) != 4 {
+			return fmt.Errorf("invalid Abort message length: expected 4, got %d", len(msg.Data()))
 		}
-		_ = t.reader.SetChunkSize(size)
+		// TODO: Abort 처리 구현 필요 (해당 chunk stream ID의 진행 중인 메시지 폐기)
+
+	case MsgTypeAcknowledgement:
+		if len(msg.Data()) != 4 {
+			return fmt.Errorf("invalid Acknowledgement message length: expected 4, got %d", len(msg.Data()))
+		}
+		// TODO: 상대방 ACK 추적하여 송신 flow control 구현 필요 (선택적)
+		// Acknowledgement는 상대방이 받은 바이트 수를 알려줌
+
+	case MsgTypeUserControl:
+		if len(msg.Data()) < 2 {
+			return fmt.Errorf("invalid UserControl message length: expected >= 2, got %d", len(msg.Data()))
+		}
+		// TODO: PingRequest(6) 받으면 PingResponse(7) 자동 응답 구현 필요
+		// UserControl은 다양한 이벤트 타입이 있으므로 최소 길이만 검증
 
 	case MsgTypeWindowAckSize:
 		if len(msg.Data()) != 4 {
-			return fmt.Errorf("invalid WindowAckSize message length")
+			return fmt.Errorf("invalid WindowAckSize message length: expected 4, got %d", len(msg.Data()))
 		}
-		t.windowAckSize = binary.BigEndian.Uint32(msg.Data())
+		newWindowSize := binary.BigEndian.Uint32(msg.Data())
+		if t.windowAckSize != newWindowSize {
+			t.lastAckSent = t.conn.BytesRead()
+		}
+		t.windowAckSize = newWindowSize
 
 	case MsgTypeSetPeerBW:
 		if len(msg.Data()) != 5 {
-			return fmt.Errorf("invalid SetPeerBandwidth message length")
+			return fmt.Errorf("invalid SetPeerBandwidth message length: expected 5, got %d", len(msg.Data()))
 		}
 		t.peerBandwidth = binary.BigEndian.Uint32(msg.Data())
 	}

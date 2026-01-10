@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -97,20 +96,13 @@ func (r *Reader) getReadyMessage(csid uint32) *Message {
 		refCount: refCount,
 	}
 
-	// 프로토콜 제어 메시지를 내부적으로 자동 처리 (검증 포함)
-	if err := r.handleProtocolControl(msg); err != nil {
-		// 검증 실패 시 nil 반환 (메시지가 유효하지 않음)
-		// 에러는 이미 내부적으로 로그/처리됨
-		return nil
-	}
-
 	// 이전 헤더 업데이트 (다음 메시지를 위해)
 	cs.PrevHeader = cs.MessageHeader
 
 	return msg
 }
 
-// setChunkSize sets the chunk size for reading
+// SetChunkSize sets the chunk size for reading
 func (r *Reader) SetChunkSize(size uint32) error {
 	if size > MaxChunkSize {
 		return fmt.Errorf("chunk size %d exceeds maximum %d", size, MaxChunkSize)
@@ -151,67 +143,6 @@ func (r *Reader) Read(p []byte) (int, error) {
 func (r *Reader) ReadFull(p []byte) error {
 	_, err := io.ReadFull(r.conn, p)
 	return err
-}
-
-// validateExactLength validates that message data has exact length
-func validateExactLength(msg *Message, expected int, msgName string) error {
-	if len(msg.Data()) != expected {
-		return fmt.Errorf("invalid %s message length: expected %d, got %d", msgName, expected, len(msg.Data()))
-	}
-	return nil
-}
-
-// validateMinLength validates that message data has at least minimum length
-func validateMinLength(msg *Message, min int, msgName string) error {
-	if len(msg.Data()) < min {
-		return fmt.Errorf("invalid %s message length: expected >= %d, got %d", msgName, min, len(msg.Data()))
-	}
-	return nil
-}
-
-// handleProtocolControl validates and handles protocol control messages internally
-func (r *Reader) handleProtocolControl(msg *Message) error {
-	switch msg.Type() {
-	case MsgTypeSetChunkSize:
-		if err := validateExactLength(msg, 4, "SetChunkSize"); err != nil {
-			return err
-		}
-		// 후속 메시지 읽기를 위해 reader의 청크 크기 업데이트
-		size := binary.BigEndian.Uint32(msg.Data()) & 0x7FFFFFFF
-		_ = r.SetChunkSize(size)
-
-	case MsgTypeAbort:
-		if err := validateExactLength(msg, 4, "Abort"); err != nil {
-			return err
-		}
-		// 내부 처리 불필요
-
-	case MsgTypeAcknowledgement:
-		if err := validateExactLength(msg, 4, "Acknowledgement"); err != nil {
-			return err
-		}
-		// 내부 처리 불필요
-
-	case MsgTypeUserControl:
-		if err := validateMinLength(msg, 2, "UserControl"); err != nil {
-			return err
-		}
-		// 내부 처리 불필요 (필요시 사용자가 이벤트별 검증 가능)
-
-	case MsgTypeWindowAckSize:
-		if err := validateExactLength(msg, 4, "WindowAckSize"); err != nil {
-			return err
-		}
-		// 내부 처리 불필요
-
-	case MsgTypeSetPeerBW:
-		if err := validateExactLength(msg, 5, "SetPeerBandwidth"); err != nil {
-			return err
-		}
-		// 내부 처리 불필요
-	}
-
-	return nil
 }
 
 // ReadChunkData reads chunk data using buffer pool ([]byte returned)

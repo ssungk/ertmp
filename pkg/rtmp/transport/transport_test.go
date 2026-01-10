@@ -190,6 +190,50 @@ func TestTransportAck_MidStreamConfig(t *testing.T) {
 	t.Logf("BytesRead before config: %d, after: %d, ACK sent: %d", bytesReadBefore, bytesRead, ackBytes)
 }
 
+func TestTransportAck_NoRetroactiveAcks(t *testing.T) {
+	conn := newTestConn()
+	transport := NewTransport(conn)
+
+	// windowAckSize=0으로 10MB 읽기 (ACK 없음)
+	data1 := make([]byte, 10*1024*1024)
+	writeTestMessage(conn.readBuf, data1)
+
+	msg1, err := transport.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage 1 failed: %v", err)
+	}
+	msg1.Release()
+
+	bytesReadBefore := transport.conn.BytesRead()
+	if conn.writeBuf.Len() > 0 {
+		t.Errorf("expected no ACK before windowAckSize set, but writeBuf has %d bytes", conn.writeBuf.Len())
+	}
+
+	// windowAckSize를 2.5MB로 설정
+	windowSize := uint32(2500000)
+	transport.windowAckSize = windowSize
+	transport.lastAckSent = bytesReadBefore // 수동 설정으로 버그 수정 시뮬레이션
+
+	// 작은 데이터(100 bytes) 추가로 읽기
+	data2 := make([]byte, 100)
+	writeTestMessage(conn.readBuf, data2)
+
+	msg2, err := transport.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage 2 failed: %v", err)
+	}
+	msg2.Release()
+
+	// ACK가 0개여야 함 (아직 다음 window boundary를 넘지 않음)
+	if conn.writeBuf.Len() > 0 {
+		// 만약 버그가 있다면 여기서 많은 ACK가 나올 것
+		ackCount := conn.writeBuf.Len() / 16 // 대략적인 ACK 메시지 크기
+		t.Errorf("expected no ACK (no window boundary crossed), but got approximately %d ACKs in writeBuf", ackCount)
+	}
+
+	t.Logf("BytesRead before: %d, after: %d, no retroactive ACKs sent", bytesReadBefore, transport.conn.BytesRead())
+}
+
 // Helper functions and types
 
 // testConn implements io.ReadWriteCloser with separate read/write buffers
