@@ -145,6 +145,21 @@ func (r *Reader) ReadFull(p []byte) error {
 	return err
 }
 
+// ClearChunkStream clears partially received message for a chunk stream
+func (r *Reader) ClearChunkStream(csid uint32) {
+	cs := r.chunkStreams[csid]
+	if cs == nil {
+		return
+	}
+
+	for _, buf := range cs.buffers {
+		PutBuffer(buf)
+	}
+
+	cs.buffers = cs.buffers[:0]
+	cs.BytesRead = 0
+}
+
 // ReadChunkData reads chunk data using buffer pool ([]byte returned)
 func ReadChunkData(reader io.Reader, size int) ([]byte, error) {
 	if reader == nil {

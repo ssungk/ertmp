@@ -234,6 +234,73 @@ func TestTransportAck_NoRetroactiveAcks(t *testing.T) {
 	t.Logf("BytesRead before: %d, after: %d, no retroactive ACKs sent", bytesReadBefore, transport.conn.BytesRead())
 }
 
+func TestTransportAbort_ClearChunkStream(t *testing.T) {
+	conn := newTestConn()
+	transport := NewTransport(conn)
+
+	// Directly create a chunk stream with partial data (simulating incomplete message)
+	csid := uint32(3)
+	cs := transport.reader.getChunkStream(csid)
+
+	// Simulate partial message reception
+	partialBuf := GetBuffer(128)
+	for i := 0; i < 128; i++ {
+		partialBuf[i] = byte(i)
+	}
+	cs.AppendBuffer(partialBuf)
+	cs.MessageHeader.MessageLength = 300 // Expecting 300 bytes total
+
+	// Verify chunk stream has partial data
+	if cs.BytesRead != 128 {
+		t.Fatalf("expected BytesRead=128, got %d", cs.BytesRead)
+	}
+	if cs.IsComplete() {
+		t.Fatal("chunk stream should not be complete")
+	}
+
+	// Send Abort message for chunk stream 3
+	abortPayload := make([]byte, 4)
+	binary.BigEndian.PutUint32(abortPayload, csid)
+	abortMsg := NewMessage(0, 0, MsgTypeAbort, abortPayload)
+
+	// Process abort
+	if err := transport.handleProtocolControl(abortMsg); err != nil {
+		t.Fatalf("handleProtocolControl failed: %v", err)
+	}
+	abortMsg.Release()
+
+	// Verify chunk stream is cleared
+	if cs.BytesRead != 0 {
+		t.Errorf("expected BytesRead=0 after abort, got %d", cs.BytesRead)
+	}
+	if len(cs.buffers) != 0 {
+		t.Errorf("expected empty buffers after abort, got %d buffers", len(cs.buffers))
+	}
+
+	// Verify we can send a new complete message on the same chunk stream
+	newData := make([]byte, 100)
+	for i := range newData {
+		newData[i] = byte(i + 100)
+	}
+	writeTestMessage(conn.readBuf, newData)
+
+	msg, err := transport.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage after abort failed: %v", err)
+	}
+
+	receivedData := msg.Data()
+	if len(receivedData) != 100 {
+		t.Errorf("expected 100 bytes, got %d", len(receivedData))
+	}
+	if receivedData[0] != 100 {
+		t.Errorf("expected first byte 100, got %d", receivedData[0])
+	}
+
+	msg.Release()
+	t.Logf("Abort message successfully cleared chunk stream")
+}
+
 // Helper functions and types
 
 // testConn implements io.ReadWriteCloser with separate read/write buffers

@@ -74,7 +74,8 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 		if len(msg.Data()) != 4 {
 			return fmt.Errorf("invalid Abort message length: expected 4, got %d", len(msg.Data()))
 		}
-		// TODO: Abort 처리 구현 필요 (해당 chunk stream ID의 진행 중인 메시지 폐기)
+		csid := binary.BigEndian.Uint32(msg.Data())
+		t.reader.ClearChunkStream(csid)
 
 	case MsgTypeAcknowledgement:
 		if len(msg.Data()) != 4 {
