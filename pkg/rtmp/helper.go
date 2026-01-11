@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
 
@@ -30,14 +31,16 @@ func SendOnStatus(conn *Conn, streamID uint32, level, code, description string) 
 
 // SendVideo sends video data
 func SendVideo(conn *Conn, streamID uint32, data []byte, timestamp uint32) error {
-	msg := transport.NewMessage(streamID, timestamp, transport.MsgTypeVideo, data)
+	header := transport.NewMessageHeader(streamID, timestamp, transport.MsgTypeVideo)
+	msg := transport.NewMessage(header, data)
 	defer msg.Release()
 	return conn.WriteMessage(msg)
 }
 
 // SendAudio sends audio data
 func SendAudio(conn *Conn, streamID uint32, data []byte, timestamp uint32) error {
-	msg := transport.NewMessage(streamID, timestamp, transport.MsgTypeAudio, data)
+	header := transport.NewMessageHeader(streamID, timestamp, transport.MsgTypeAudio)
+	msg := transport.NewMessage(header, data)
 	defer msg.Release()
 	return conn.WriteMessage(msg)
 }
@@ -49,16 +52,18 @@ func SendMetadata(conn *Conn, streamID uint32, metadata map[string]interface{}) 
 	if err != nil {
 		return fmt.Errorf("failed to encode metadata: %w", err)
 	}
-	msg := transport.NewMessage(streamID, 0, transport.MsgTypeAMF0Data, cmdData)
+	header := transport.NewMessageHeader(streamID, 0, transport.MsgTypeAMF0Data)
+	msg := transport.NewMessage(header, cmdData)
 	defer msg.Release()
 	return conn.WriteMessage(msg)
 }
 
 // SendSetChunkSize sends a SetChunkSize message
 func SendSetChunkSize(conn *Conn, size uint32) error {
-	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, size&0x7FFFFFFF)
-	msg := transport.NewMessage(0, 0, transport.MsgTypeSetChunkSize, data)
+	buffer := buf.NewPooled(4)
+	binary.BigEndian.PutUint32(buffer.Data(), size&0x7FFFFFFF)
+	header := transport.NewMessageHeader(0, 0, transport.MsgTypeSetChunkSize)
+	msg := transport.NewMessageFromBuffer(header, buffer)
 	defer msg.Release()
 
 	// 전송 후 transport의 outgoing 청크 크기 업데이트
@@ -70,19 +75,21 @@ func SendSetChunkSize(conn *Conn, size uint32) error {
 
 // SendWindowAckSize sends a WindowAckSize message
 func SendWindowAckSize(conn *Conn, size uint32) error {
-	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, size)
-	msg := transport.NewMessage(0, 0, transport.MsgTypeWindowAckSize, data)
+	buffer := buf.NewPooled(4)
+	binary.BigEndian.PutUint32(buffer.Data(), size)
+	header := transport.NewMessageHeader(0, 0, transport.MsgTypeWindowAckSize)
+	msg := transport.NewMessageFromBuffer(header, buffer)
 	defer msg.Release()
 	return conn.WriteMessage(msg)
 }
 
 // SendSetPeerBW sends a SetPeerBandwidth message
 func SendSetPeerBW(conn *Conn, size uint32, limitType uint8) error {
-	data := make([]byte, 5)
-	binary.BigEndian.PutUint32(data, size)
-	data[4] = limitType
-	msg := transport.NewMessage(0, 0, transport.MsgTypeSetPeerBW, data)
+	buffer := buf.NewPooled(5)
+	binary.BigEndian.PutUint32(buffer.Data(), size)
+	buffer.Data()[4] = limitType
+	header := transport.NewMessageHeader(0, 0, transport.MsgTypeSetPeerBW)
+	msg := transport.NewMessageFromBuffer(header, buffer)
 	defer msg.Release()
 	return conn.WriteMessage(msg)
 }

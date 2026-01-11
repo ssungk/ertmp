@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+
+	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 )
 
 // Transport represents a bidirectional RTMP protocol handler
@@ -137,11 +139,13 @@ func (t *Transport) sendAcknowledgement(bytesRead uint64) error {
 	ackBytes := uint32(bytesRead) // uint64 to uint32, wrap-around is expected
 
 	// Create 4-byte payload
-	payload := make([]byte, 4)
-	binary.BigEndian.PutUint32(payload, ackBytes)
+	buffer := buf.NewPooled(4)
+	binary.BigEndian.PutUint32(buffer.Data(), ackBytes)
 
 	// Create ACK message (StreamID=0, Timestamp=0, TypeID=Acknowledgement)
-	msg := NewMessage(0, 0, MsgTypeAcknowledgement, payload)
+	header := NewMessageHeader(0, 0, MsgTypeAcknowledgement)
+	msg := NewMessageFromBuffer(header, buffer)
+	defer msg.Release()
 
 	// Send message
 	return t.WriteMessage(msg)

@@ -198,7 +198,8 @@ func (s *Session) handlePlay(msg *transport.Message, cmd *rtmp.Command) error {
 
 	// publisher가 있으면 metadata 전송
 	if metadata := stream.GetMetadata(); metadata != nil {
-		rtmpMsg := transport.NewMessage(s.streamID, 0, transport.MsgTypeAMF0Data, metadata)
+		header := transport.NewMessageHeader(s.streamID, 0, transport.MsgTypeAMF0Data)
+		rtmpMsg := transport.NewMessage(header, metadata)
 		if err := s.conn.WriteMessage(rtmpMsg); err != nil {
 			slog.Error("Failed to send metadata", "error", err)
 		}

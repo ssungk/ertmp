@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"io"
 	"testing"
+
+	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 )
 
 func TestTransportAck_Disabled(t *testing.T) {
@@ -238,30 +240,40 @@ func TestTransportAbort_ClearChunkStream(t *testing.T) {
 	conn := newTestConn()
 	transport := NewTransport(conn)
 
-	// Directly create a chunk stream with partial data (simulating incomplete message)
+	// Directly create a message assembler with partial data (simulating incomplete message)
 	csid := uint32(3)
-	cs := transport.reader.getChunkStream(csid)
+	ma, ok := transport.reader.assemblers[csid]
+	if !ok {
+		ma = newMessageAssembler()
+		transport.reader.assemblers[csid] = ma
+	}
 
 	// Simulate partial message reception
-	partialBuf := GetBuffer(128)
-	for i := 0; i < 128; i++ {
-		partialBuf[i] = byte(i)
+	ma.messageHeader.MessageLength = 300 // Set expected total length first
+	if ma.buffer == nil {
+		ma.buffer = buf.NewPooled(int(ma.messageHeader.MessageLength))
 	}
-	cs.AppendBuffer(partialBuf)
-	cs.MessageHeader.MessageLength = 300 // Expecting 300 bytes total
 
-	// Verify chunk stream has partial data
-	if cs.BytesRead != 128 {
-		t.Fatalf("expected BytesRead=128, got %d", cs.BytesRead)
+	// Write partial data
+	partialData := ma.nextBuffer(128)
+	for i := 0; i < 128; i++ {
+		partialData[i] = byte(i)
 	}
-	if cs.IsComplete() {
-		t.Fatal("chunk stream should not be complete")
+	ma.bytesRead += 128
+
+	// Verify assembler has partial data
+	if ma.bytesRead != 128 {
+		t.Fatalf("expected bytesRead=128, got %d", ma.bytesRead)
+	}
+	if ma.isComplete() {
+		t.Fatal("message should not be complete")
 	}
 
 	// Send Abort message for chunk stream 3
 	abortPayload := make([]byte, 4)
 	binary.BigEndian.PutUint32(abortPayload, csid)
-	abortMsg := NewMessage(0, 0, MsgTypeAbort, abortPayload)
+	header := NewMessageHeader(0, 0, MsgTypeAbort)
+	abortMsg := NewMessage(header, abortPayload)
 
 	// Process abort
 	if err := transport.handleProtocolControl(abortMsg); err != nil {
@@ -269,12 +281,12 @@ func TestTransportAbort_ClearChunkStream(t *testing.T) {
 	}
 	abortMsg.Release()
 
-	// Verify chunk stream is cleared
-	if cs.BytesRead != 0 {
-		t.Errorf("expected BytesRead=0 after abort, got %d", cs.BytesRead)
+	// Verify assembler is cleared
+	if ma.bytesRead != 0 {
+		t.Errorf("expected bytesRead=0 after abort, got %d", ma.bytesRead)
 	}
-	if len(cs.buffers) != 0 {
-		t.Errorf("expected empty buffers after abort, got %d buffers", len(cs.buffers))
+	if ma.buffer != nil {
+		t.Errorf("expected nil buffer after abort, got non-nil buffer")
 	}
 
 	// Verify we can send a new complete message on the same chunk stream
@@ -298,7 +310,7 @@ func TestTransportAbort_ClearChunkStream(t *testing.T) {
 	}
 
 	msg.Release()
-	t.Logf("Abort message successfully cleared chunk stream")
+	t.Logf("Abort message successfully cleared message assembler")
 }
 
 // Helper functions and types

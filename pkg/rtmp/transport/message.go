@@ -1,60 +1,47 @@
 package transport
 
-import "sync/atomic"
+import "github.com/ssungk/ertmp/pkg/rtmp/buf"
 
-// Message represents an RTMP message with reference counting
+// Message represents an RTMP message with reference-counted buffer
 type Message struct {
-	Header   MessageHeader
-	buffers  [][]byte
-	refCount *atomic.Int32
+	Header MessageHeader
+	buffer *buf.Buffer
 }
 
-// NewMessage creates a new message with data
-func NewMessage(streamID uint32, timestamp uint32, typeID uint8, data []byte) *Message {
-	refCount := &atomic.Int32{}
-	refCount.Store(1)
-
-	buffers := GetBufferSlice()
-	if len(data) > 0 {
-		buf := GetBuffer(len(data))
-		copy(buf, data)
-		buffers = append(buffers, buf[:len(data)])
-	}
-
-	header := NewMessageHeader(streamID, timestamp, typeID)
+// NewMessage creates a new message with data (copies data into pooled buffer)
+func NewMessage(header MessageHeader, data []byte) *Message {
 	header.MessageLength = uint32(len(data))
 
+	// Allocate buffer from pool
+	buffer := buf.NewPooled(len(data))
+	copy(buffer.Data(), data)
+
 	return &Message{
-		Header:   header,
-		buffers:  buffers,
-		refCount: refCount,
+		Header: header,
+		buffer: buffer,
+	}
+}
+
+// NewMessageFromBuffer creates a message from existing buffer (zero-copy)
+func NewMessageFromBuffer(header MessageHeader, buffer *buf.Buffer) *Message {
+	header.MessageLength = uint32(buffer.Len())
+
+	return &Message{
+		Header: header,
+		buffer: buffer,
 	}
 }
 
 // Data returns the payload bytes
 func (m *Message) Data() []byte {
-	if len(m.buffers) == 0 {
+	if m.buffer == nil {
 		return nil
 	}
-	if len(m.buffers) == 1 {
-		return m.buffers[0][:m.Header.MessageLength] // 실제 데이터 크기만 반환
+	data := m.buffer.Data()
+	if uint32(len(data)) > m.Header.MessageLength {
+		return data[:m.Header.MessageLength]
 	}
-	// multiple buffers, merge only when needed
-	result := make([]byte, 0, m.Header.MessageLength)
-	remaining := m.Header.MessageLength
-	for _, buf := range m.buffers {
-		if remaining == 0 {
-			break
-		}
-		if uint32(len(buf)) <= remaining {
-			result = append(result, buf...)
-			remaining -= uint32(len(buf))
-		} else {
-			result = append(result, buf[:remaining]...)
-			break
-		}
-	}
-	return result
+	return data
 }
 
 // Type returns the message type ID
@@ -74,37 +61,30 @@ func (m *Message) Timestamp() uint32 {
 
 // Retain increments the reference count
 func (m *Message) Retain() {
-	if m.refCount != nil {
-		m.refCount.Add(1)
+	if m.buffer != nil {
+		m.buffer.Retain()
 	}
 }
 
-// Share creates a new message sharing the same buffers with different streamID
+// Share creates a new message sharing the same buffer with different streamID (zero-copy)
 func (m *Message) Share(streamID uint32) *Message {
-	if m.refCount != nil {
-		m.refCount.Add(1)
+	// Increment reference count on buffer
+	if m.buffer != nil {
+		m.buffer.Retain()
 	}
+
 	header := NewMessageHeader(streamID, m.Header.Timestamp, m.Header.MessageTypeID)
 	header.MessageLength = m.Header.MessageLength
+
 	return &Message{
-		Header:   header,
-		buffers:  m.buffers,
-		refCount: m.refCount,
+		Header: header,
+		buffer: m.buffer, // Share same buffer pointer
 	}
 }
 
-// Release releases message resources back to pool
+// Release releases buffer back to pool
 func (m *Message) Release() {
-	if m.refCount == nil || m.buffers == nil {
-		return
-	}
-
-	// refCount 감소
-	count := m.refCount.Add(-1)
-
-	// 마지막 참조가 해제되면 버퍼를 풀에 반납
-	if count == 0 {
-		PutBufferSlice(m.buffers)
-		m.buffers = nil
+	if m.buffer != nil {
+		m.buffer.Release()
 	}
 }

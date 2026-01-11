@@ -6,17 +6,17 @@ import (
 
 // Writer writes RTMP messages to a stream
 type Writer struct {
-	conn         *meteredConn
-	chunkStreams map[uint32]*ChunkStream
-	chunkSize    uint32
+	conn        *meteredConn
+	prevHeaders map[uint32]MessageHeader
+	chunkSize   uint32
 }
 
 // NewWriter creates a new RTMP writer
 func NewWriter(mc *meteredConn) *Writer {
 	return &Writer{
-		conn:         mc,
-		chunkStreams: make(map[uint32]*ChunkStream),
-		chunkSize:    DefaultChunkSize,
+		conn:        mc,
+		prevHeaders: make(map[uint32]MessageHeader),
+		chunkSize:   DefaultChunkSize,
 	}
 }
 
@@ -34,12 +34,17 @@ func (w *Writer) SetChunkSize(size uint32) error {
 
 // WriteMessage writes a complete RTMP message
 func (w *Writer) WriteMessage(msg *Message) error {
-	// 청크 스트림 획득 또는 생성
+	// 청크 스트림 ID 결정
 	csid := w.getChunkStreamID(msg.Header.MessageTypeID)
-	cs := w.getChunkStream(csid)
 
 	// 포맷 타입 결정
-	fmtType := w.determineFormatType(cs.PrevHeader, msg.Header)
+	prevHeader, exists := w.prevHeaders[csid]
+	var fmtType uint8
+	if !exists {
+		fmtType = FmtType0 // 첫 메시지는 전체 헤더
+	} else {
+		fmtType = w.determineFormatType(prevHeader, msg.Header)
+	}
 
 	// 메시지 데이터 획득
 	data := msg.Data()
@@ -92,7 +97,7 @@ func (w *Writer) WriteMessage(msg *Message) error {
 	}
 
 	// 이전 헤더 업데이트
-	cs.PrevHeader = msg.Header
+	w.prevHeaders[csid] = msg.Header
 
 	return nil
 }
@@ -139,16 +144,6 @@ func (w *Writer) getChunkStreamID(msgType uint8) uint32 {
 	default:
 		return ChunkStreamCommand
 	}
-}
-
-// getChunkStream gets or creates a chunk stream
-func (w *Writer) getChunkStream(id uint32) *ChunkStream {
-	cs, ok := w.chunkStreams[id]
-	if !ok {
-		cs = NewChunkStream()
-		w.chunkStreams[id] = cs
-	}
-	return cs
 }
 
 // WriteByte writes a single byte

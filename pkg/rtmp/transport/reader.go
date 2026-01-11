@@ -1,25 +1,25 @@
 package transport
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"sync/atomic"
+
+	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 )
 
 // Reader reads RTMP messages from a stream
 type Reader struct {
-	conn         *meteredConn
-	chunkStreams map[uint32]*ChunkStream
-	chunkSize    uint32
+	conn       *meteredConn
+	assemblers map[uint32]*MessageAssembler
+	chunkSize  uint32
 }
 
 // NewReader creates a new RTMP reader
 func NewReader(mc *meteredConn) *Reader {
 	return &Reader{
-		conn:         mc,
-		chunkStreams: make(map[uint32]*ChunkStream),
-		chunkSize:    DefaultChunkSize,
+		conn:       mc,
+		assemblers: make(map[uint32]*MessageAssembler),
+		chunkSize:  DefaultChunkSize,
 	}
 }
 
@@ -37,7 +37,7 @@ func (r *Reader) ReadMessage() (*Message, error) {
 	}
 }
 
-// readChunk reads a single chunk and accumulates data in chunk streams
+// readChunk reads a single chunk and accumulates data in message assemblers
 func (r *Reader) readChunk() (uint32, error) {
 	// Read basic header
 	basicHeader, err := readBasicHeader(r.conn)
@@ -45,35 +45,36 @@ func (r *Reader) readChunk() (uint32, error) {
 		return 0, fmt.Errorf("chunk basic header: %w: %w", ErrRtmpRead, err)
 	}
 
-	// 청크 스트림 획득 또는 생성
-	cs := r.getChunkStream(basicHeader.chunkStreamID)
+	// 메시지 어셈블러 획득 또는 생성
+	ma, ok := r.assemblers[basicHeader.chunkStreamID]
+	if !ok {
+		ma = newMessageAssembler()
+		r.assemblers[basicHeader.chunkStreamID] = ma
+	}
 
 	// fmt에 따라 메시지 헤더 읽기
-	msgHeader, err := readMessageHeader(r.conn, basicHeader.fmt, &cs.PrevHeader)
+	msgHeader, err := readMessageHeader(r.conn, basicHeader.fmt, &ma.prevHeader)
 	if err != nil {
 		return 0, fmt.Errorf("chunk message header: %w: %w", ErrRtmpRead, err)
 	}
 
-	// 새 메시지 시작: 헤더 갱신
-	if cs.BytesRead == 0 {
-		cs.MessageHeader = msgHeader
+	// 새 메시지 시작: 헤더 갱신 및 버퍼 할당
+	if ma.bytesRead == 0 {
+		ma.messageHeader = msgHeader
+		ma.buffer = buf.NewPooled(int(ma.messageHeader.MessageLength))
 	}
 
 	// 청크 데이터 크기 계산
-	remainingBytes := cs.MessageHeader.MessageLength - cs.BytesRead
-	chunkDataSize := r.chunkSize
-	if remainingBytes < chunkDataSize {
-		chunkDataSize = remainingBytes
-	}
+	remainingBytes := ma.messageHeader.MessageLength - ma.bytesRead
+	chunkDataSize := min(r.chunkSize, remainingBytes)
 
-	// 청크 데이터 읽기 (버퍼 풀 사용, 제로 카피)
-	buf, err := ReadChunkData(r.conn, int(chunkDataSize))
-	if err != nil {
+	// 청크 데이터를 메시지 버퍼에 직접 읽기
+	if _, err := io.ReadFull(r.conn, ma.nextBuffer(chunkDataSize)); err != nil {
 		return 0, fmt.Errorf("chunk data: %w: %w", ErrRtmpRead, err)
 	}
 
-	// 메시지 버퍼에 추가 (복사 없이 버퍼 참조만 저장)
-	cs.AppendBuffer(buf)
+	// 읽은 바이트 수 업데이트
+	ma.bytesRead += chunkDataSize
 
 	// 청크 스트림 ID 반환
 	return basicHeader.chunkStreamID, nil
@@ -81,23 +82,18 @@ func (r *Reader) readChunk() (uint32, error) {
 
 // getReadyMessage returns a completed message if available
 func (r *Reader) getReadyMessage(csid uint32) *Message {
-	// 청크 스트림에 완성된 메시지가 있는지 확인
-	cs := r.chunkStreams[csid]
-	if cs == nil || !cs.IsComplete() {
+	// 완성된 메시지가 있는지 확인
+	ma := r.assemblers[csid]
+	if ma == nil || !ma.isComplete() {
 		return nil
 	}
 
-	// 완성된 청크 스트림에서 메시지 생성 (zero-copy)
-	refCount := &atomic.Int32{}
-	refCount.Store(1)
-	msg := &Message{
-		Header:   cs.MessageHeader,
-		buffers:  cs.MoveBuffers(),
-		refCount: refCount,
-	}
+	// 완성된 메시지 생성 (버퍼 소유권 이전)
+	buffer := ma.moveBuffer()
+	msg := NewMessageFromBuffer(ma.messageHeader, buffer)
 
 	// 이전 헤더 업데이트 (다음 메시지를 위해)
-	cs.PrevHeader = cs.MessageHeader
+	ma.prevHeader = ma.messageHeader
 
 	return msg
 }
@@ -114,68 +110,17 @@ func (r *Reader) SetChunkSize(size uint32) error {
 	return nil
 }
 
-// getChunkStream gets or creates a chunk stream
-func (r *Reader) getChunkStream(id uint32) *ChunkStream {
-	cs, ok := r.chunkStreams[id]
-	if !ok {
-		cs = NewChunkStream()
-		r.chunkStreams[id] = cs
-	}
-	return cs
-}
-
 // BytesRead returns the total number of bytes read from the socket
 func (r *Reader) BytesRead() uint64 {
 	return r.conn.BytesRead()
 }
 
-// ReadByte reads a single byte
-func (r *Reader) ReadByte() (byte, error) {
-	return r.conn.ReadByte()
-}
-
-// Read reads data into a buffer
-func (r *Reader) Read(p []byte) (int, error) {
-	return r.conn.Read(p)
-}
-
-// ReadFull reads exactly len(p) bytes
-func (r *Reader) ReadFull(p []byte) error {
-	_, err := io.ReadFull(r.conn, p)
-	return err
-}
-
 // ClearChunkStream clears partially received message for a chunk stream
 func (r *Reader) ClearChunkStream(csid uint32) {
-	cs := r.chunkStreams[csid]
-	if cs == nil {
+	ma := r.assemblers[csid]
+	if ma == nil {
 		return
 	}
 
-	for _, buf := range cs.buffers {
-		PutBuffer(buf)
-	}
-
-	cs.buffers = cs.buffers[:0]
-	cs.BytesRead = 0
-}
-
-// ReadChunkData reads chunk data using buffer pool ([]byte returned)
-func ReadChunkData(reader io.Reader, size int) ([]byte, error) {
-	if reader == nil {
-		return nil, errors.New("reader is nil")
-	}
-
-	if size <= 0 {
-		return nil, fmt.Errorf("invalid size: %d (must be positive)", size)
-	}
-
-	buf := GetBuffer(size)
-	_, err := io.ReadFull(reader, buf)
-	if err != nil {
-		PutBuffer(buf)
-		return nil, fmt.Errorf("read %d bytes: %w: %w", size, ErrRtmpRead, err)
-	}
-
-	return buf, nil
+	ma.clear()
 }

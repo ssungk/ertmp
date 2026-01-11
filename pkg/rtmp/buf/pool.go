@@ -1,0 +1,89 @@
+package buf
+
+import "sync"
+
+// Buffer size constants
+const (
+	Size32   = 1 << 5  // 32B - Parsing: headers, protocol control
+	Size512  = 1 << 9  // 512B - Small messages: commands, audio
+	Size4K   = 1 << 12 // 4KB - Medium chunks, metadata
+	Size16K  = 1 << 14 // 16KB - Video/Audio frames
+	Size64K  = 1 << 16 // 64KB - Large chunks
+	Size256K = 1 << 18 // 256KB - Large video frames
+	Size1M   = 1 << 20 // 1MB - Very large frames
+	Size4M   = 1 << 22 // 4MB - 4K video I-frames
+	Size8M   = 1 << 23 // 8MB - 4K ultra-high quality I-frames
+)
+
+// Pools for different buffer sizes
+var (
+	pool32   = sync.Pool{New: func() any { return make([]byte, Size32) }}
+	pool512  = sync.Pool{New: func() any { return make([]byte, Size512) }}
+	pool4K   = sync.Pool{New: func() any { return make([]byte, Size4K) }}
+	pool16K  = sync.Pool{New: func() any { return make([]byte, Size16K) }}
+	pool64K  = sync.Pool{New: func() any { return make([]byte, Size64K) }}
+	pool256K = sync.Pool{New: func() any { return make([]byte, Size256K) }}
+	pool1M   = sync.Pool{New: func() any { return make([]byte, Size1M) }}
+	pool4M   = sync.Pool{New: func() any { return make([]byte, Size4M) }}
+	pool8M   = sync.Pool{New: func() any { return make([]byte, Size8M) }}
+)
+
+// alloc returns a buffer from pool based on size
+// If size exceeds largest pool, allocates directly
+func alloc(size int) []byte {
+	switch {
+	case size <= Size32:
+		return pool32.Get().([]byte)[:size]
+	case size <= Size512:
+		return pool512.Get().([]byte)[:size]
+	case size <= Size4K:
+		return pool4K.Get().([]byte)[:size]
+	case size <= Size16K:
+		return pool16K.Get().([]byte)[:size]
+	case size <= Size64K:
+		return pool64K.Get().([]byte)[:size]
+	case size <= Size256K:
+		return pool256K.Get().([]byte)[:size]
+	case size <= Size1M:
+		return pool1M.Get().([]byte)[:size]
+	case size <= Size4M:
+		return pool4M.Get().([]byte)[:size]
+	case size <= Size8M:
+		return pool8M.Get().([]byte)[:size]
+	default:
+		// Size exceeds pool range, allocate directly
+		return make([]byte, size)
+	}
+}
+
+// free returns a buffer to the appropriate pool based on capacity
+func free(buf []byte) {
+	if buf == nil {
+		return
+	}
+
+	capacity := cap(buf)
+
+	switch capacity {
+	case Size32:
+		pool32.Put(buf[:cap(buf)])
+	case Size512:
+		pool512.Put(buf[:cap(buf)])
+	case Size4K:
+		pool4K.Put(buf[:cap(buf)])
+	case Size16K:
+		pool16K.Put(buf[:cap(buf)])
+	case Size64K:
+		pool64K.Put(buf[:cap(buf)])
+	case Size256K:
+		pool256K.Put(buf[:cap(buf)])
+	case Size1M:
+		pool1M.Put(buf[:cap(buf)])
+	case Size4M:
+		pool4M.Put(buf[:cap(buf)])
+	case Size8M:
+		pool8M.Put(buf[:cap(buf)])
+	default:
+		// Not from pool or oversized, let GC handle it
+	}
+}

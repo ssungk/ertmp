@@ -215,13 +215,15 @@ func NewConnectResponseMessage(txID float64, props map[string]interface{}) *tran
 	}
 
 	cmdData, _ := EncodeCommand("_result", txID, props, info)
-	return transport.NewMessage(0, 0, transport.MsgTypeAMF0Command, cmdData)
+	header := transport.NewMessageHeader(0, 0, transport.MsgTypeAMF0Command)
+	return transport.NewMessage(header, cmdData)
 }
 
 // NewCreateStreamResponseMessage creates a createStream response message
 func NewCreateStreamResponseMessage(txID float64, streamID float64) *transport.Message {
 	cmdData, _ := EncodeCommand("_result", txID, nil, streamID)
-	return transport.NewMessage(0, 0, transport.MsgTypeAMF0Command, cmdData)
+	header := transport.NewMessageHeader(0, 0, transport.MsgTypeAMF0Command)
+	return transport.NewMessage(header, cmdData)
 }
 
 // NewOnStatusMessage creates an onStatus command message
@@ -233,5 +235,6 @@ func NewOnStatusMessage(streamID uint32, level, code, description string) *trans
 	}
 
 	cmdData, _ := EncodeCommand("onStatus", 0, nil, info)
-	return transport.NewMessage(streamID, 0, transport.MsgTypeAMF0Command, cmdData)
+	header := transport.NewMessageHeader(streamID, 0, transport.MsgTypeAMF0Command)
+	return transport.NewMessage(header, cmdData)
 }
