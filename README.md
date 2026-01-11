@@ -7,7 +7,10 @@ A Go library implementation of the Real-Time Messaging Protocol (RTMP) with plan
 **Current**: RTMP basic implementation completed
 - ✅ RTMP handshake
 - ✅ Chunk-based I/O (Reader/Writer)
-- ✅ Transport layer
+- ✅ Transport layer with protocol control messages
+- ✅ Automatic acknowledgement and window size handling
+- ✅ Abort message support for canceling partial messages
+- ✅ Reference-counted buffer management with pooling
 - ✅ Connection management
 - ✅ AMF0 encoding/decoding
 - ✅ Command messages (connect, publish, play)
@@ -34,16 +37,20 @@ go get github.com/ssungk/ertmp
 │   ├── amf/               # AMF0/AMF3 encoder/decoder
 │   ├── common/            # Common types and constants
 │   └── rtmp/              # RTMP core implementation
+│       ├── buf/           # Buffer management with pooling
+│       │   ├── buffer.go          # Reference-counted buffer
+│       │   └── pool.go            # Memory pool for buffers
 │       ├── command.go     # AMF command encoding/decoding
 │       ├── config.go      # RTMP configuration
 │       ├── conn.go        # RTMP connection management
 │       ├── helper.go      # Helper functions
 │       └── transport/     # RTMP transport layer (I/O)
 │           ├── handshake.go        # RTMP handshake
-│           ├── reader.go           # Chunk reader
+│           ├── reader.go           # Chunk reader with message assembly
 │           ├── writer.go           # Chunk writer
 │           ├── transport.go        # Transport (Reader + Writer)
-│           └── message.go          # Message types
+│           ├── message.go          # Message types
+│           └── message_assembler.go # Assembles chunks into messages
 ├── cmd/                   # Command-line applications
 │   ├── server/           # Example RTMP server
 │   └── client/           # Example RTMP client
@@ -101,10 +108,23 @@ The RTMP implementation is split into two clear layers:
 
 ### Design Principles
 
-- **Zero-copy oriented**: Buffer pooling, minimize allocations
+- **Zero-copy oriented**: Buffer pooling with reference counting, minimize allocations
 - **Clear layer separation**: Transport and RTMP layers are independent
 - **No circular dependencies**: Clean module structure
 - **Simple and focused**: Each component has a single responsibility
+- **Thread-safe buffer management**: Automatic memory pool management with reference counting
+
+### Key Implementation Details
+
+#### Buffer Management (`pkg/rtmp/buf/`)
+- **Reference-counted buffers**: Automatic memory management using atomic reference counting
+- **Tiered memory pools**: Multiple pool sizes (32B, 512B, 4KB, 16KB, 64KB) for efficient allocation
+- **Zero-copy sharing**: Messages can share buffers across streams without copying
+
+#### Message Assembly (`pkg/rtmp/transport/`)
+- **MessageAssembler**: Reconstructs complete messages from interleaved chunks
+- **Per-stream state**: Maintains separate assembly state for each chunk stream ID
+- **Direct buffer writes**: Chunks are read directly into pre-allocated message buffers
 
 ## Testing with FFmpeg
 
