@@ -2,13 +2,14 @@ package buf
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"unsafe"
 )
 
 func TestBufferPooled(t *testing.T) {
 	// Create pooled buffer
-	buf := NewPooled(1024)
+	buf := NewFromPool(1024)
 	if buf.Len() != 1024 {
 		t.Errorf("expected length 1024, got %d", buf.Len())
 	}
@@ -36,14 +37,14 @@ func TestBufferCustomRelease(t *testing.T) {
 	released := false
 	data := make([]byte, 100)
 
-	buf := NewWithRelease(data, func(b []byte) {
+	buf := NewWithFinalizer(data, func(b []byte) {
 		released = true
 	})
 
 	buf.Release()
 
 	if !released {
-		t.Error("custom release function not called")
+		t.Error("custom finalizer not called")
 	}
 }
 
@@ -51,7 +52,7 @@ func TestBufferRefCount(t *testing.T) {
 	released := false
 	data := make([]byte, 100)
 
-	buf := NewWithRelease(data, func(b []byte) {
+	buf := NewWithFinalizer(data, func(b []byte) {
 		released = true
 	})
 
@@ -59,27 +60,42 @@ func TestBufferRefCount(t *testing.T) {
 	buf.Retain()
 	buf.Retain()
 
-	// Release twice - should not call release function
+	// Release twice - should not call finalizer
 	buf.Release()
 	buf.Release()
 
 	if released {
-		t.Error("release function called before refcount reached zero")
+		t.Error("finalizer called before refcount reached zero")
 	}
 
 	// Final release
 	buf.Release()
 
 	if !released {
-		t.Error("release function not called after refcount reached zero")
+		t.Error("finalizer not called after refcount reached zero")
 	}
+}
+
+func TestBufferNilRefCount(t *testing.T) {
+	// Create buffer with nil refCount (should not panic on Release)
+	buf := &Buffer{
+		data:      make([]byte, 100),
+		refCount:  nil,
+		finalizer: nil,
+	}
+
+	// Release should not panic
+	buf.Release()
+
+	// Retain should also not panic
+	buf.Retain()
 }
 
 func TestBufferConcurrentRetainRelease(t *testing.T) {
 	const goroutines = 100
 	const iterations = 1000
 
-	buf := NewPooled(1024)
+	buf := NewFromPool(1024)
 
 	// Retain many times
 	for i := 0; i < goroutines*iterations; i++ {
@@ -105,48 +121,65 @@ func TestBufferConcurrentRetainRelease(t *testing.T) {
 	buf.Release()
 }
 
-func TestPoolGetPut(t *testing.T) {
-	sizes := []int{32, 512, 4096, 16384, 65536, 262144, 1048576, 4194304}
+func TestBufferDataAccessors(t *testing.T) {
+	size := 1024
+	buf := NewFromPool(size)
+	defer buf.Release()
 
-	for _, size := range sizes {
-		buf := alloc(size)
-		if len(buf) != size {
-			t.Errorf("expected size %d, got %d", size, len(buf))
-		}
+	// Test Len
+	if buf.Len() != size {
+		t.Errorf("expected Len=%d, got %d", size, buf.Len())
+	}
 
-		// Write pattern
-		for i := 0; i < len(buf); i++ {
-			buf[i] = byte(i % 256)
-		}
+	// Test Cap
+	if buf.Cap() < size {
+		t.Errorf("expected Cap>=%d, got %d", size, buf.Cap())
+	}
 
-		free(buf)
+	// Test Data
+	data := buf.Data()
+	if len(data) != size {
+		t.Errorf("expected data length=%d, got %d", size, len(data))
+	}
 
-		// Get again and verify it's cleared or reused
-		buf2 := alloc(size)
-		if len(buf2) != size {
-			t.Errorf("expected size %d, got %d", size, len(buf2))
-		}
-		free(buf2)
+	// Verify we can write to data
+	copy(data, []byte("test"))
+	if string(data[:4]) != "test" {
+		t.Error("data write failed")
 	}
 }
 
-func TestPoolOversized(t *testing.T) {
-	// Request size larger than largest pool
-	size := Size4M + 1024
-	buf := alloc(size)
+func TestBufferReleaseWithoutRetain(t *testing.T) {
+	releaseCalled := false
+	data := make([]byte, 100)
 
-	if len(buf) != size {
-		t.Errorf("expected size %d, got %d", size, len(buf))
+	buf := NewWithFinalizer(data, func(b []byte) {
+		releaseCalled = true
+	})
+
+	// Single release should call finalizer
+	buf.Release()
+
+	if !releaseCalled {
+		t.Error("finalizer should be called when refcount reaches zero")
 	}
+}
 
-	// Put should not panic
-	free(buf)
+// Test memory overhead
+func TestBufferSize(t *testing.T) {
+	buf := NewFromPool(100)
+	size := unsafe.Sizeof(*buf)
+	t.Logf("Buffer struct size: %d bytes", size)
+	t.Logf("  data: %d bytes", unsafe.Sizeof(buf.data))
+	t.Logf("  refCount: %d bytes", unsafe.Sizeof(buf.refCount))
+	t.Logf("  finalizer: %d bytes", unsafe.Sizeof(buf.finalizer))
+	buf.Release()
 }
 
 func BenchmarkBufferPooled(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		buf := NewPooled(1024)
+		buf := NewFromPool(1024)
 		_ = buf.Data()
 		buf.Release()
 	}
@@ -163,7 +196,7 @@ func BenchmarkBufferNoRelease(b *testing.B) {
 }
 
 func BenchmarkBufferRetainRelease(b *testing.B) {
-	buf := NewPooled(1024)
+	buf := NewFromPool(1024)
 	b.ReportAllocs()
 	b.ResetTimer()
 
@@ -173,45 +206,27 @@ func BenchmarkBufferRetainRelease(b *testing.B) {
 	}
 }
 
-func BenchmarkPoolGet1K(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		buf := alloc(1024)
-		free(buf)
-	}
+func BenchmarkBufferConcurrentRetain(b *testing.B) {
+	buf := NewFromPool(1024)
+	defer buf.Release()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			buf.Retain()
+			buf.Release()
+		}
+	})
 }
 
-func BenchmarkPoolGet64K(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		buf := alloc(65536)
-		free(buf)
-	}
-}
+func BenchmarkAtomicInt32(b *testing.B) {
+	var counter atomic.Int32
+	counter.Store(1)
 
-func BenchmarkPoolGet1M(b *testing.B) {
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		buf := alloc(1048576)
-		free(buf)
-	}
-}
-
-func BenchmarkDirectAlloc1M(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		buf := make([]byte, 1048576)
-		_ = buf
-	}
-}
-
-// Test memory overhead
-func TestBufferSize(t *testing.T) {
-	buf := NewPooled(100)
-	size := unsafe.Sizeof(*buf)
-	t.Logf("Buffer struct size: %d bytes", size)
-	t.Logf("  data: %d bytes", unsafe.Sizeof(buf.data))
-	t.Logf("  refCount: %d bytes", unsafe.Sizeof(buf.refCount))
-	t.Logf("  release: %d bytes", unsafe.Sizeof(buf.release))
-	buf.Release()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			counter.Add(1)
+			counter.Add(-1)
+		}
+	})
 }

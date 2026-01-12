@@ -139,7 +139,7 @@ func (t *Transport) sendAcknowledgement(bytesRead uint64) error {
 	ackBytes := uint32(bytesRead) // uint64 to uint32, wrap-around is expected
 
 	// Create 4-byte payload
-	buffer := buf.NewPooled(4)
+	buffer := buf.NewFromPool(4)
 	binary.BigEndian.PutUint32(buffer.Data(), ackBytes)
 
 	// Create ACK message (StreamID=0, Timestamp=0, TypeID=Acknowledgement)

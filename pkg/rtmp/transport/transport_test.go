@@ -251,7 +251,7 @@ func TestTransportAbort_ClearChunkStream(t *testing.T) {
 	// Simulate partial message reception
 	ma.messageHeader.MessageLength = 300 // Set expected total length first
 	if ma.buffer == nil {
-		ma.buffer = buf.NewPooled(int(ma.messageHeader.MessageLength))
+		ma.buffer = buf.NewFromPool(int(ma.messageHeader.MessageLength))
 	}
 
 	// Write partial data

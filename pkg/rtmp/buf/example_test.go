@@ -8,9 +8,9 @@ import (
 )
 
 // Example of using pooled buffer
-func ExampleNewPooled() {
+func ExampleNewFromPool() {
 	// Get buffer from pool
-	buf := buf.NewPooled(1024)
+	buf := buf.NewFromPool(1024)
 	defer buf.Release()
 
 	// Use buffer
@@ -20,30 +20,30 @@ func ExampleNewPooled() {
 	// Output: Data: Hello, World!
 }
 
-// Example of using buffer with custom release
-func ExampleNewWithRelease() {
+// Example of using buffer with custom finalizer
+func ExampleNewWithFinalizer() {
 	// Simulate C malloc
 	size := 1024
 	ptr := make([]byte, size) // In real case: C.malloc(C.size_t(size))
 
-	// Create buffer with custom release
-	b := buf.NewWithRelease(ptr, func(data []byte) {
+	// Create buffer with custom finalizer
+	b := buf.NewWithFinalizer(ptr, func(data []byte) {
 		// In real case: C.free(unsafe.Pointer(&data[0]))
-		fmt.Println("Custom release called")
+		fmt.Println("Custom finalizer called")
 	})
 
 	// Use buffer
 	copy(b.Data(), []byte("Data from C memory"))
 
-	// Release will call custom function
+	// Release will call custom finalizer
 	b.Release()
 
-	// Output: Custom release called
+	// Output: Custom finalizer called
 }
 
 // Example of reference counting
 func ExampleBuffer_Retain() {
-	buf := buf.NewPooled(1024)
+	buf := buf.NewFromPool(1024)
 
 	// Share buffer
 	buf.Retain() // refCount = 2
@@ -92,7 +92,7 @@ func Example_poolSizes() {
 	}
 
 	for _, size := range sizes {
-		buf := buf.NewPooled(size)
+		buf := buf.NewFromPool(size)
 		fmt.Printf("Size: %7d bytes, Len: %7d, Cap: %7d\n", size, buf.Len(), buf.Cap())
 		buf.Release()
 	}
@@ -111,9 +111,9 @@ func Example_poolSizes() {
 
 // Example of oversized buffer (exceeds pool)
 func Example_oversized() {
-	// Request 10MB buffer (exceeds Size4M)
+	// Request 10MB buffer (exceeds Size8M)
 	size := 10 * 1024 * 1024
-	buf := buf.NewPooled(size)
+	buf := buf.NewFromPool(size)
 	defer buf.Release()
 
 	fmt.Printf("Oversized buffer: %d bytes\n", buf.Len())
@@ -125,7 +125,7 @@ func Example_oversized() {
 // Example showing memory efficiency
 func Example_memoryEfficiency() {
 	// Buffer struct overhead
-	buf := buf.NewPooled(100)
+	buf := buf.NewFromPool(100)
 	structSize := unsafe.Sizeof(*buf)
 
 	fmt.Printf("Buffer struct overhead: %d bytes\n", structSize)

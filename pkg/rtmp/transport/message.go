@@ -13,7 +13,7 @@ func NewMessage(header MessageHeader, data []byte) *Message {
 	header.MessageLength = uint32(len(data))
 
 	// Allocate buffer from pool
-	buffer := buf.NewPooled(len(data))
+	buffer := buf.NewFromPool(len(data))
 	copy(buffer.Data(), data)
 
 	return &Message{

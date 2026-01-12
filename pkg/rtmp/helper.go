@@ -60,7 +60,7 @@ func SendMetadata(conn *Conn, streamID uint32, metadata map[string]interface{}) 
 
 // SendSetChunkSize sends a SetChunkSize message
 func SendSetChunkSize(conn *Conn, size uint32) error {
-	buffer := buf.NewPooled(4)
+	buffer := buf.NewFromPool(4)
 	binary.BigEndian.PutUint32(buffer.Data(), size&0x7FFFFFFF)
 	header := transport.NewMessageHeader(0, 0, transport.MsgTypeSetChunkSize)
 	msg := transport.NewMessageFromBuffer(header, buffer)
@@ -75,7 +75,7 @@ func SendSetChunkSize(conn *Conn, size uint32) error {
 
 // SendWindowAckSize sends a WindowAckSize message
 func SendWindowAckSize(conn *Conn, size uint32) error {
-	buffer := buf.NewPooled(4)
+	buffer := buf.NewFromPool(4)
 	binary.BigEndian.PutUint32(buffer.Data(), size)
 	header := transport.NewMessageHeader(0, 0, transport.MsgTypeWindowAckSize)
 	msg := transport.NewMessageFromBuffer(header, buffer)
@@ -85,7 +85,7 @@ func SendWindowAckSize(conn *Conn, size uint32) error {
 
 // SendSetPeerBW sends a SetPeerBandwidth message
 func SendSetPeerBW(conn *Conn, size uint32, limitType uint8) error {
-	buffer := buf.NewPooled(5)
+	buffer := buf.NewFromPool(5)
 	binary.BigEndian.PutUint32(buffer.Data(), size)
 	buffer.Data()[4] = limitType
 	header := transport.NewMessageHeader(0, 0, transport.MsgTypeSetPeerBW)

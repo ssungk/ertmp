@@ -61,7 +61,7 @@ func (r *Reader) readChunk() (uint32, error) {
 	// 새 메시지 시작: 헤더 갱신 및 버퍼 할당
 	if ma.bytesRead == 0 {
 		ma.messageHeader = msgHeader
-		ma.buffer = buf.NewPooled(int(ma.messageHeader.MessageLength))
+		ma.buffer = buf.NewFromPool(int(ma.messageHeader.MessageLength))
 	}
 
 	// 청크 데이터 크기 계산

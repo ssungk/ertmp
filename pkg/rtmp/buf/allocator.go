@@ -2,17 +2,19 @@ package buf
 
 import "sync"
 
-// Buffer size constants
+// Predefined buffer pool sizes.
+// The maximum size (8MB) is chosen to handle 4K video I-frames,
+// which typically range from 2-8MB depending on quality settings.
 const (
-	Size32   = 1 << 5  // 32B - Parsing: headers, protocol control
-	Size512  = 1 << 9  // 512B - Small messages: commands, audio
-	Size4K   = 1 << 12 // 4KB - Medium chunks, metadata
-	Size16K  = 1 << 14 // 16KB - Video/Audio frames
-	Size64K  = 1 << 16 // 64KB - Large chunks
-	Size256K = 1 << 18 // 256KB - Large video frames
-	Size1M   = 1 << 20 // 1MB - Very large frames
-	Size4M   = 1 << 22 // 4MB - 4K video I-frames
-	Size8M   = 1 << 23 // 8MB - 4K ultra-high quality I-frames
+	Size32   = 1 << 5  // 32 bytes
+	Size512  = 1 << 9  // 512 bytes
+	Size4K   = 1 << 12 // 4 KB
+	Size16K  = 1 << 14 // 16 KB
+	Size64K  = 1 << 16 // 64 KB
+	Size256K = 1 << 18 // 256 KB
+	Size1M   = 1 << 20 // 1 MB
+	Size4M   = 1 << 22 // 4 MB
+	Size8M   = 1 << 23 // 8 MB
 )
 
 // Pools for different buffer sizes
