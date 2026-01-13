@@ -21,7 +21,7 @@ func TestBufferPooled(t *testing.T) {
 	buf.Release()
 }
 
-func TestBufferNoRelease(t *testing.T) {
+func TestBufferGCManaged(t *testing.T) {
 	data := make([]byte, 100)
 	buf := New(data)
 
@@ -29,7 +29,7 @@ func TestBufferNoRelease(t *testing.T) {
 		t.Errorf("expected length 100, got %d", buf.Len())
 	}
 
-	// Release should not panic
+	// Release should not panic (no finalizer to call)
 	buf.Release()
 }
 
@@ -74,21 +74,6 @@ func TestBufferRefCount(t *testing.T) {
 	if !released {
 		t.Error("finalizer not called after refcount reached zero")
 	}
-}
-
-func TestBufferNilRefCount(t *testing.T) {
-	// Create buffer with nil refCount (should not panic on Release)
-	buf := &Buffer{
-		data:      make([]byte, 100),
-		refCount:  nil,
-		finalizer: nil,
-	}
-
-	// Release should not panic
-	buf.Release()
-
-	// Retain should also not panic
-	buf.Retain()
 }
 
 func TestBufferConcurrentRetainRelease(t *testing.T) {

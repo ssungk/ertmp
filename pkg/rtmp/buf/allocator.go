@@ -17,7 +17,9 @@ const (
 	Size8M   = 1 << 23 // 8 MB
 )
 
-// Pools for different buffer sizes
+// Buffer pools for different size tiers.
+// Each pool manages buffers of a fixed capacity to reduce heap allocations
+// and improve performance for frequently-allocated sizes.
 var (
 	pool32   = sync.Pool{New: func() any { return make([]byte, Size32) }}
 	pool512  = sync.Pool{New: func() any { return make([]byte, Size512) }}

@@ -1,3 +1,26 @@
+// Package buf provides reference-counted buffers with memory pooling.
+//
+// The package implements a zero-copy buffer management system optimized
+// for RTMP message handling. Buffers are pooled in 9 size tiers from
+// 32 bytes to 8MB to minimize heap allocations.
+//
+// Basic usage:
+//
+//	buf := buf.NewFromPool(1024)
+//	defer buf.Release()
+//	copy(buf.Data(), data)
+//
+// For shared buffers, use Retain/Release:
+//
+//	buf.Retain()  // Increment reference count
+//	go func() {
+//	    defer buf.Release()
+//	    // use buf
+//	}()
+//	buf.Release()  // Original owner releases
+//
+// Buffers must be created through constructors (New, NewFromPool, NewWithFinalizer).
+// Direct struct initialization will cause a panic.
 package buf
 
 import "sync/atomic"
@@ -49,17 +72,11 @@ func (b *Buffer) Cap() int {
 
 // Retain increments the reference count
 func (b *Buffer) Retain() {
-	if b.refCount != nil {
-		b.refCount.Add(1)
-	}
+	b.refCount.Add(1)
 }
 
 // Release decrements the reference count and calls finalizer when it reaches zero
 func (b *Buffer) Release() {
-	if b.refCount == nil {
-		return
-	}
-
 	count := b.refCount.Add(-1)
 	if count == 0 && b.finalizer != nil {
 		b.finalizer(b.data)

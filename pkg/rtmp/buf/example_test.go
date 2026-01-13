@@ -2,7 +2,6 @@ package buf_test
 
 import (
 	"fmt"
-	"unsafe"
 
 	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 )
@@ -22,18 +21,18 @@ func ExampleNewFromPool() {
 
 // Example of using buffer with custom finalizer
 func ExampleNewWithFinalizer() {
-	// Simulate C malloc
+	// Example with custom cleanup logic
 	size := 1024
-	ptr := make([]byte, size) // In real case: C.malloc(C.size_t(size))
+	data := make([]byte, size)
 
 	// Create buffer with custom finalizer
-	b := buf.NewWithFinalizer(ptr, func(data []byte) {
-		// In real case: C.free(unsafe.Pointer(&data[0]))
+	b := buf.NewWithFinalizer(data, func(data []byte) {
+		// Custom cleanup (e.g., C.free, file close, etc.)
 		fmt.Println("Custom finalizer called")
 	})
 
 	// Use buffer
-	copy(b.Data(), []byte("Data from C memory"))
+	copy(b.Data(), []byte("Data with custom cleanup"))
 
 	// Release will call custom finalizer
 	b.Release()
@@ -120,22 +119,4 @@ func Example_oversized() {
 	// This will be allocated directly with make() and GC collected after Release()
 
 	// Output: Oversized buffer: 10485760 bytes
-}
-
-// Example showing memory efficiency
-func Example_memoryEfficiency() {
-	// Buffer struct overhead
-	buf := buf.NewFromPool(100)
-	structSize := unsafe.Sizeof(*buf)
-
-	fmt.Printf("Buffer struct overhead: %d bytes\n", structSize)
-	fmt.Printf("Actual data size: %d bytes\n", buf.Len())
-	fmt.Printf("Total: %d bytes\n", int(structSize)+buf.Len())
-
-	buf.Release()
-
-	// Output:
-	// Buffer struct overhead: 40 bytes
-	// Actual data size: 100 bytes
-	// Total: 140 bytes
 }
