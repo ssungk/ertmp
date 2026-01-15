@@ -76,6 +76,9 @@ func (r *Reader) readChunk() (uint32, error) {
 	// 읽은 바이트 수 업데이트
 	ma.bytesRead += chunkDataSize
 
+	// 이전 헤더 업데이트 (다음 청크를 위해, FmtType3이 참조함)
+	ma.prevHeader = msgHeader
+
 	// 청크 스트림 ID 반환
 	return basicHeader.chunkStreamID, nil
 }

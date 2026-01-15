@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"encoding/binary"
 	"fmt"
 )
 
@@ -37,13 +38,33 @@ func (w *Writer) WriteMessage(msg *Message) error {
 	// 청크 스트림 ID 결정
 	csid := w.getChunkStreamID(msg.Header.MessageTypeID)
 
-	// 포맷 타입 결정
+	// 포맷 타입 결정 및 헤더 준비
 	prevHeader, exists := w.prevHeaders[csid]
 	var fmtType uint8
+	var headerToWrite MessageHeader
+
 	if !exists {
 		fmtType = FmtType0 // 첫 메시지는 전체 헤더
+		headerToWrite = msg.Header
+		// FmtType0: TimestampDelta는 Timestamp와 동일 (연속 청크용)
+		headerToWrite.TimestampDelta = msg.Header.Timestamp
 	} else {
 		fmtType = w.determineFormatType(prevHeader, msg.Header)
+		headerToWrite = msg.Header
+
+		// Delta 계산 (FmtType1/2에서 사용)
+		if fmtType == FmtType1 || fmtType == FmtType2 {
+			headerToWrite.TimestampDelta = msg.Header.Timestamp - prevHeader.Timestamp
+		} else if fmtType == FmtType0 {
+			// FmtType0: TimestampDelta는 Timestamp와 동일 (연속 청크용)
+			headerToWrite.TimestampDelta = msg.Header.Timestamp
+		}
+	}
+
+	// Extended Timestamp 플래그 설정
+	if headerToWrite.Timestamp >= ExtendedTimestampThreshold ||
+		headerToWrite.TimestampDelta >= ExtendedTimestampThreshold {
+		headerToWrite.hasExtendedTimestamp = true
 	}
 
 	// 메시지 데이터 획득
@@ -74,7 +95,7 @@ func (w *Writer) WriteMessage(msg *Message) error {
 			}
 
 			// 메시지 헤더 작성
-			if _, err := msg.Header.WriteTo(w.conn, fmtType); err != nil {
+			if _, err := headerToWrite.WriteTo(w.conn, fmtType); err != nil {
 				return fmt.Errorf("chunk message header: %w: %w", ErrRtmpWrite, err)
 			}
 
@@ -84,6 +105,15 @@ func (w *Writer) WriteMessage(msg *Message) error {
 			basicHeader := newBasicHeader(FmtType3, csid)
 			if _, err := basicHeader.WriteTo(w.conn); err != nil {
 				return fmt.Errorf("chunk continuation header: %w: %w", ErrRtmpWrite, err)
+			}
+
+			// Extended Timestamp 처리 (첫 청크가 사용했다면 매 청크마다)
+			if headerToWrite.hasExtendedTimestamp {
+				extTs := make([]byte, 4)
+				binary.BigEndian.PutUint32(extTs, headerToWrite.TimestampDelta)
+				if _, err := w.conn.Write(extTs); err != nil {
+					return fmt.Errorf("chunk continuation extended timestamp: %w: %w", ErrRtmpWrite, err)
+				}
 			}
 		}
 
@@ -97,7 +127,7 @@ func (w *Writer) WriteMessage(msg *Message) error {
 	}
 
 	// 이전 헤더 업데이트
-	w.prevHeaders[csid] = msg.Header
+	w.prevHeaders[csid] = headerToWrite
 
 	return nil
 }

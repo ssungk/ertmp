@@ -28,30 +28,86 @@ func NewMessageHeader(streamID, timestamp uint32, typeID uint8) MessageHeader {
 func (h MessageHeader) WriteTo(w io.Writer, fmtType uint8) (int64, error) {
 	switch fmtType {
 	case FmtType0:
-		// 전체 헤더 (11바이트)
+		// 전체 헤더 (11바이트 + Extended Timestamp 4바이트)
+		ts := h.Timestamp
+		hasExtTimestamp := ts >= ExtendedTimestampThreshold
+		if hasExtTimestamp {
+			ts = ExtendedTimestampThreshold
+		}
+
 		data := make([]byte, 11)
-		WriteUint24BE(data[0:3], h.Timestamp)
+		WriteUint24BE(data[0:3], ts)
 		WriteUint24BE(data[3:6], h.MessageLength)
 		data[6] = h.MessageTypeID
 		binary.LittleEndian.PutUint32(data[7:11], h.MessageStreamID)
 		n, err := w.Write(data)
-		return int64(n), err
+		if err != nil {
+			return int64(n), err
+		}
+
+		// Extended Timestamp (4바이트, 필요 시)
+		if hasExtTimestamp {
+			extTs := make([]byte, 4)
+			binary.BigEndian.PutUint32(extTs, h.Timestamp)
+			n2, err := w.Write(extTs)
+			return int64(n) + int64(n2), err
+		}
+
+		return int64(n), nil
 
 	case FmtType1:
-		// 동일한 스트림 ID (7바이트)
+		// 동일한 스트림 ID (7바이트 + Extended Timestamp 4바이트)
+		// FmtType1은 Timestamp Delta를 사용
+		delta := h.TimestampDelta
+		hasExtTimestamp := delta >= ExtendedTimestampThreshold
+		if hasExtTimestamp {
+			delta = ExtendedTimestampThreshold
+		}
+
 		data := make([]byte, 7)
-		WriteUint24BE(data[0:3], h.Timestamp)
+		WriteUint24BE(data[0:3], delta)
 		WriteUint24BE(data[3:6], h.MessageLength)
 		data[6] = h.MessageTypeID
 		n, err := w.Write(data)
-		return int64(n), err
+		if err != nil {
+			return int64(n), err
+		}
+
+		// Extended Timestamp (delta, 4바이트, 필요 시)
+		if hasExtTimestamp {
+			extTs := make([]byte, 4)
+			binary.BigEndian.PutUint32(extTs, h.TimestampDelta)
+			n2, err := w.Write(extTs)
+			return int64(n) + int64(n2), err
+		}
+
+		return int64(n), nil
 
 	case FmtType2:
-		// 동일한 길이와 스트림 ID (3바이트)
+		// 동일한 길이와 스트림 ID (3바이트 + Extended Timestamp 4바이트)
+		// FmtType2는 Timestamp Delta를 사용
+		delta := h.TimestampDelta
+		hasExtTimestamp := delta >= ExtendedTimestampThreshold
+		if hasExtTimestamp {
+			delta = ExtendedTimestampThreshold
+		}
+
 		data := make([]byte, 3)
-		WriteUint24BE(data[0:3], h.Timestamp)
+		WriteUint24BE(data[0:3], delta)
 		n, err := w.Write(data)
-		return int64(n), err
+		if err != nil {
+			return int64(n), err
+		}
+
+		// Extended Timestamp (delta, 4바이트, 필요 시)
+		if hasExtTimestamp {
+			extTs := make([]byte, 4)
+			binary.BigEndian.PutUint32(extTs, h.TimestampDelta)
+			n2, err := w.Write(extTs)
+			return int64(n) + int64(n2), err
+		}
+
+		return int64(n), nil
 
 	case FmtType3:
 		// 헤더 없음 (0바이트)
