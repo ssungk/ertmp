@@ -199,7 +199,7 @@ func TestWriterExtendedTimestamp_RoundTrip(t *testing.T) {
 		0xFFFFFF,              // At threshold (ExtendedTimestampThreshold)
 		0xFFFFFF + 1,          // Just above threshold
 		0xFFFFFF + 1000000,    // Far above threshold
-		0x7FFFFFFF,            // Max int32
+		ChunkSizeMsgMask,      // Max int32 (0x7FFFFFFF)
 		0xFFFFFFFF,            // Max uint32
 	}
 

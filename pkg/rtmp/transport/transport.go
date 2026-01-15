@@ -41,10 +41,12 @@ func (t *Transport) ReadMessage() (*Message, error) {
 	}
 
 	if err := t.handleProtocolControl(msg); err != nil {
+		msg.Release()
 		return nil, err
 	}
 
 	if err := t.handleAckWindow(); err != nil {
+		msg.Release()
 		return nil, err
 	}
 
@@ -68,24 +70,21 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 		if len(msg.Data()) != 4 {
 			return fmt.Errorf("invalid SetChunkSize message length: expected 4, got %d", len(msg.Data()))
 		}
-		size := binary.BigEndian.Uint32(msg.Data()) & 0x7FFFFFFF
+		size := binary.BigEndian.Uint32(msg.Data()) & ChunkSizeMsgMask
 
 		return t.reader.SetChunkSize(size)
-
 	case MsgTypeAbort:
 		if len(msg.Data()) != 4 {
 			return fmt.Errorf("invalid Abort message length: expected 4, got %d", len(msg.Data()))
 		}
 		csid := binary.BigEndian.Uint32(msg.Data())
 		t.reader.ClearChunkStream(csid)
-
 	case MsgTypeAcknowledgement:
 		if len(msg.Data()) != 4 {
 			return fmt.Errorf("invalid Acknowledgement message length: expected 4, got %d", len(msg.Data()))
 		}
 		// TODO: 상대방 ACK 추적하여 송신 flow control 구현 필요 (선택적)
 		// Acknowledgement는 상대방이 받은 바이트 수를 알려줌
-
 	case MsgTypeUserControl:
 		if len(msg.Data()) < 2 {
 			return fmt.Errorf("invalid UserControl message length: expected >= 2, got %d", len(msg.Data()))
@@ -111,7 +110,6 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 			}
 		}
 		// 다른 UserControl 이벤트는 무시 (StreamBegin, StreamEOF 등)
-
 	case MsgTypeWindowAckSize:
 		if len(msg.Data()) != 4 {
 			return fmt.Errorf("invalid WindowAckSize message length: expected 4, got %d", len(msg.Data()))
@@ -121,7 +119,6 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 			t.lastAckSent = t.conn.BytesRead()
 		}
 		t.windowAckSize = newWindowSize
-
 	case MsgTypeSetPeerBW:
 		if len(msg.Data()) != 5 {
 			return fmt.Errorf("invalid SetPeerBandwidth message length: expected 5, got %d", len(msg.Data()))
