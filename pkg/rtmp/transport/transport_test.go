@@ -433,3 +433,161 @@ func readAckMessage(buf *bytes.Buffer) (uint32, error) {
 	ackBytes := binary.BigEndian.Uint32(payload)
 	return ackBytes, nil
 }
+
+// TestTransportPingPong_AutoResponse tests automatic PingResponse to PingRequest
+func TestTransportPingPong_AutoResponse(t *testing.T) {
+	conn := newTestConn()
+	transport := NewTransport(conn)
+
+	// Create PingRequest message with timestamp
+	timestamp := uint32(12345)
+	pingData := make([]byte, 6) // 2 bytes event type + 4 bytes timestamp
+	binary.BigEndian.PutUint16(pingData[0:2], UserControlPingRequest)
+	binary.BigEndian.PutUint32(pingData[2:6], timestamp)
+
+	header := NewMessageHeader(0, 0, MsgTypeUserControl)
+	pingMsg := NewMessage(header, pingData)
+
+	// Write PingRequest to readBuf
+	writePingMessage(conn.readBuf, pingData)
+
+	// Read message (this should trigger PingResponse)
+	msg, err := transport.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage failed: %v", err)
+	}
+	msg.Release()
+	pingMsg.Release()
+
+	// Verify PingResponse was sent to writeBuf
+	if conn.writeBuf.Len() == 0 {
+		t.Fatal("Expected PingResponse, but writeBuf is empty")
+	}
+
+	// Read PingResponse from writeBuf
+	eventType, responseTimestamp, err := readPingMessage(conn.writeBuf)
+	if err != nil {
+		t.Fatalf("Failed to read PingResponse: %v", err)
+	}
+
+	// Verify it's PingResponse
+	if eventType != UserControlPingResponse {
+		t.Errorf("Expected PingResponse (0x%X), got 0x%X", UserControlPingResponse, eventType)
+	}
+
+	// Verify timestamp is the same
+	if responseTimestamp != timestamp {
+		t.Errorf("Timestamp mismatch: expected %d, got %d", timestamp, responseTimestamp)
+	}
+
+	t.Logf("PingRequest (timestamp=%d) -> PingResponse (timestamp=%d)", timestamp, responseTimestamp)
+}
+
+// TestTransportUserControl_IgnoreOtherEvents tests that other UserControl events are ignored
+func TestTransportUserControl_IgnoreOtherEvents(t *testing.T) {
+	testCases := []struct {
+		name      string
+		eventType uint16
+		dataLen   int
+	}{
+		{"StreamBegin", UserControlStreamBegin, 4},
+		{"StreamEOF", UserControlStreamEOF, 4},
+		{"SetBufferLen", UserControlSetBufferLen, 8},
+		{"PingResponse", UserControlPingResponse, 4},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			conn := newTestConn()
+			transport := NewTransport(conn)
+
+			// Create UserControl message
+			msgData := make([]byte, 2+tc.dataLen)
+			binary.BigEndian.PutUint16(msgData[0:2], tc.eventType)
+			// Fill with dummy data
+			for i := 2; i < len(msgData); i++ {
+				msgData[i] = byte(i)
+			}
+
+			// Write message to readBuf
+			writeTestMessage(conn.readBuf, msgData)
+
+			// Read message (should not trigger any response)
+			msg, err := transport.ReadMessage()
+			if err != nil {
+				t.Fatalf("ReadMessage failed: %v", err)
+			}
+			msg.Release()
+
+			// Verify no response was sent
+			if conn.writeBuf.Len() > 0 {
+				t.Errorf("Expected no response for %s, but writeBuf has %d bytes",
+					tc.name, conn.writeBuf.Len())
+			}
+
+			t.Logf("%s event ignored successfully", tc.name)
+		})
+	}
+}
+
+// Helper functions for Ping/Pong tests
+
+// writePingMessage writes a UserControl message to buffer
+func writePingMessage(buf *bytes.Buffer, data []byte) {
+	// Write basic header (fmt=0, csid=2 for protocol control)
+	buf.WriteByte(0x02)
+
+	// Write message header (fmt 0: 11 bytes)
+	header := make([]byte, 11)
+	// timestamp (3 bytes): 0
+	header[0] = 0
+	header[1] = 0
+	header[2] = 0
+	// message length (3 bytes)
+	msgLen := uint32(len(data))
+	header[3] = byte(msgLen >> 16)
+	header[4] = byte(msgLen >> 8)
+	header[5] = byte(msgLen)
+	// message type (1 byte): UserControl
+	header[6] = MsgTypeUserControl
+	// message stream id (4 bytes, little endian): 0
+	header[7] = 0
+	header[8] = 0
+	header[9] = 0
+	header[10] = 0
+	buf.Write(header)
+
+	// Write data
+	buf.Write(data)
+}
+
+// readPingMessage reads a Ping/Pong message from buffer
+func readPingMessage(buf *bytes.Buffer) (eventType uint16, timestamp uint32, err error) {
+	// Read basic header
+	_, err = buf.ReadByte()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Read message header (11 bytes for fmt 0)
+	msgHeader := make([]byte, 11)
+	if _, err := io.ReadFull(buf, msgHeader); err != nil {
+		return 0, 0, err
+	}
+
+	// Read event type (2 bytes)
+	eventTypeBytes := make([]byte, 2)
+	if _, err := io.ReadFull(buf, eventTypeBytes); err != nil {
+		return 0, 0, err
+	}
+	eventType = binary.BigEndian.Uint16(eventTypeBytes)
+
+	// Read timestamp (4 bytes)
+	timestampBytes := make([]byte, 4)
+	if _, err := io.ReadFull(buf, timestampBytes); err != nil {
+		return 0, 0, err
+	}
+	timestamp = binary.BigEndian.Uint32(timestampBytes)
+
+	return eventType, timestamp, nil
+}

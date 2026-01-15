@@ -90,8 +90,27 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 		if len(msg.Data()) < 2 {
 			return fmt.Errorf("invalid UserControl message length: expected >= 2, got %d", len(msg.Data()))
 		}
-		// TODO: PingRequest(6) 받으면 PingResponse(7) 자동 응답 구현 필요
-		// UserControl은 다양한 이벤트 타입이 있으므로 최소 길이만 검증
+
+		eventType, eventData, err := parseUserControl(msg.Data())
+		if err != nil {
+			return err
+		}
+
+		// PingRequest 자동 응답
+		if eventType == UserControlPingRequest {
+			if len(eventData) != 4 {
+				return fmt.Errorf("invalid PingRequest data length: expected 4, got %d", len(eventData))
+			}
+
+			// PingResponse 전송 (동일한 timestamp)
+			pongMsg := createUserControl(UserControlPingResponse, eventData)
+			defer pongMsg.Release()
+
+			if err := t.WriteMessage(pongMsg); err != nil {
+				return fmt.Errorf("send PingResponse: %w", err)
+			}
+		}
+		// 다른 UserControl 이벤트는 무시 (StreamBegin, StreamEOF 등)
 
 	case MsgTypeWindowAckSize:
 		if len(msg.Data()) != 4 {
@@ -164,4 +183,24 @@ func (t *Transport) SetOutChunkSize(size uint32) error {
 // Close closes the transport
 func (t *Transport) Close() error {
 	return t.rwc.Close()
+}
+
+// parseUserControl parses UserControl message data
+func parseUserControl(data []byte) (eventType uint16, eventData []byte, err error) {
+	if len(data) < 2 {
+		return 0, nil, fmt.Errorf("UserControl message too short: expected >= 2, got %d", len(data))
+	}
+	eventType = binary.BigEndian.Uint16(data[0:2])
+	eventData = data[2:]
+	return
+}
+
+// createUserControl creates a UserControl message
+func createUserControl(eventType uint16, eventData []byte) *Message {
+	data := make([]byte, 2+len(eventData))
+	binary.BigEndian.PutUint16(data[0:2], eventType)
+	copy(data[2:], eventData)
+
+	header := NewMessageHeader(0, 0, MsgTypeUserControl)
+	return NewMessage(header, data)
 }
