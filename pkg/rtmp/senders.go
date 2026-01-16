@@ -1,10 +1,8 @@
 package rtmp
 
 import (
-	"encoding/binary"
 	"fmt"
-	
-	"github.com/ssungk/ertmp/pkg/rtmp/buf"
+
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
 
@@ -54,27 +52,6 @@ func SendMetadata(conn *Conn, streamID uint32, metadata map[string]interface{}) 
 	}
 	header := transport.NewMessageHeader(streamID, 0, transport.MsgTypeAMF0Data)
 	msg := transport.NewMessage(header, cmdData)
-	defer msg.Release()
-	return conn.WriteMessage(msg)
-}
-
-// SendWindowAckSize sends a WindowAckSize message
-func SendWindowAckSize(conn *Conn, size uint32) error {
-	buffer := buf.NewFromPool(4)
-	binary.BigEndian.PutUint32(buffer.Data(), size)
-	header := transport.NewMessageHeader(0, 0, transport.MsgTypeWindowAckSize)
-	msg := transport.NewMessageFromBuffer(header, buffer)
-	defer msg.Release()
-	return conn.WriteMessage(msg)
-}
-
-// SendSetPeerBW sends a SetPeerBandwidth message
-func SendSetPeerBW(conn *Conn, size uint32, limitType uint8) error {
-	buffer := buf.NewFromPool(5)
-	binary.BigEndian.PutUint32(buffer.Data(), size)
-	buffer.Data()[4] = limitType
-	header := transport.NewMessageHeader(0, 0, transport.MsgTypeSetPeerBW)
-	msg := transport.NewMessageFromBuffer(header, buffer)
 	defer msg.Release()
 	return conn.WriteMessage(msg)
 }

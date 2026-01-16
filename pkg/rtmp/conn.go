@@ -91,3 +91,15 @@ func (c *Conn) WriteMessage(msg *transport.Message) error {
 func (c *Conn) SetChunkSize(size uint32) error {
 	return c.transport.SetOutChunkSize(size)
 }
+
+// SetWindowAckSize sets the window acknowledgement size
+// Sends WindowAckSize message
+func (c *Conn) SetWindowAckSize(size uint32) error {
+	return c.transport.SetWindowAckSize(size)
+}
+
+// SetPeerBandwidth sets the peer bandwidth
+// Sends SetPeerBandwidth message
+func (c *Conn) SetPeerBandwidth(size uint32, limitType uint8) error {
+	return c.transport.SetPeerBandwidth(size, limitType)
+}

@@ -191,6 +191,45 @@ func (t *Transport) SetOutChunkSize(size uint32) error {
 	return t.writer.SetChunkSize(size)
 }
 
+// SetWindowAckSize sets the window acknowledgement size and sends WindowAckSize message
+func (t *Transport) SetWindowAckSize(size uint32) error {
+	// Create 4-byte payload
+	buffer := buf.NewFromPool(4)
+	binary.BigEndian.PutUint32(buffer.Data(), size)
+
+	header := NewMessageHeader(0, 0, MsgTypeWindowAckSize)
+	msg := NewMessageFromBuffer(header, buffer)
+	defer msg.Release()
+
+	// Send message
+	if err := t.WriteMessage(msg); err != nil {
+		return fmt.Errorf("send WindowAckSize: %w", err)
+	}
+
+	// Update local window ack size (no state needed on send side)
+	return nil
+}
+
+// SetPeerBandwidth sets the peer bandwidth and sends SetPeerBandwidth message
+func (t *Transport) SetPeerBandwidth(size uint32, limitType uint8) error {
+	// Create 5-byte payload (4 bytes size + 1 byte limit type)
+	buffer := buf.NewFromPool(5)
+	binary.BigEndian.PutUint32(buffer.Data(), size)
+	buffer.Data()[4] = limitType
+
+	header := NewMessageHeader(0, 0, MsgTypeSetPeerBW)
+	msg := NewMessageFromBuffer(header, buffer)
+	defer msg.Release()
+
+	// Send message
+	if err := t.WriteMessage(msg); err != nil {
+		return fmt.Errorf("send SetPeerBandwidth: %w", err)
+	}
+
+	// Update local peer bandwidth (no state needed on send side)
+	return nil
+}
+
 // Close closes the transport
 func (t *Transport) Close() error {
 	return t.rwc.Close()

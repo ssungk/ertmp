@@ -19,10 +19,10 @@ func HandleConnect(conn *Conn, msg *transport.Message) error {
 	}
 
 	// 프로토콜 제어 메시지 전송
-	if err := SendWindowAckSize(conn, conn.config.WindowAckSize); err != nil {
+	if err := conn.SetWindowAckSize(conn.config.WindowAckSize); err != nil {
 		return err
 	}
-	if err := SendSetPeerBW(conn, conn.config.PeerBandwidth, 2); err != nil {
+	if err := conn.SetPeerBandwidth(conn.config.PeerBandwidth, 2); err != nil {
 		return err
 	}
 	if err := conn.SetChunkSize(conn.config.ChunkSize); err != nil {
