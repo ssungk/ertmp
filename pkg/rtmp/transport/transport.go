@@ -167,8 +167,27 @@ func (t *Transport) sendAcknowledgement(bytesRead uint64) error {
 	return t.WriteMessage(msg)
 }
 
-// SetOutChunkSize sets the outgoing chunk size
+// SetOutChunkSize sets the outgoing chunk size and sends SetChunkSize message
 func (t *Transport) SetOutChunkSize(size uint32) error {
+	// Validate chunk size
+	if size < 1 || size > MaxChunkSize {
+		return fmt.Errorf("invalid chunk size: %d (must be 1-%d)", size, MaxChunkSize)
+	}
+
+	// Create 4-byte payload (MSB must be 0, so mask with 0x7FFFFFFF)
+	buffer := buf.NewFromPool(4)
+	binary.BigEndian.PutUint32(buffer.Data(), size&ChunkSizeMsgMask)
+
+	header := NewMessageHeader(0, 0, MsgTypeSetChunkSize)
+	msg := NewMessageFromBuffer(header, buffer)
+	defer msg.Release()
+
+	// Send message
+	if err := t.WriteMessage(msg); err != nil {
+		return fmt.Errorf("send SetChunkSize: %w", err)
+	}
+
+	// Update local outgoing chunk size
 	return t.writer.SetChunkSize(size)
 }
 

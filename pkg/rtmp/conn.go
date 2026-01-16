@@ -85,3 +85,9 @@ func (c *Conn) ReadMessage() (*transport.Message, error) {
 func (c *Conn) WriteMessage(msg *transport.Message) error {
 	return c.transport.WriteMessage(msg)
 }
+
+// SetChunkSize sets the outgoing chunk size
+// Sends SetChunkSize message and updates local writer state
+func (c *Conn) SetChunkSize(size uint32) error {
+	return c.transport.SetOutChunkSize(size)
+}

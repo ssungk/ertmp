@@ -58,30 +58,6 @@ func SendMetadata(conn *Conn, streamID uint32, metadata map[string]interface{}) 
 	return conn.WriteMessage(msg)
 }
 
-// SendSetChunkSize sends a SetChunkSize message and updates local chunk size
-func SendSetChunkSize(conn *Conn, size uint32) error {
-	// Validate chunk size
-	if size < 1 || size > transport.MaxChunkSize {
-		return fmt.Errorf("invalid chunk size: %d (must be 1-%d)", size, transport.MaxChunkSize)
-	}
-	
-	// Create 4-byte payload (MSB must be 0, so mask with 0x7FFFFFFF)
-	buffer := buf.NewFromPool(4)
-	binary.BigEndian.PutUint32(buffer.Data(), size&transport.ChunkSizeMsgMask)
-	
-	header := transport.NewMessageHeader(0, 0, transport.MsgTypeSetChunkSize)
-	msg := transport.NewMessageFromBuffer(header, buffer)
-	defer msg.Release()
-	
-	// Send message
-	if err := conn.WriteMessage(msg); err != nil {
-		return fmt.Errorf("send SetChunkSize: %w", err)
-	}
-	
-	// Update local outgoing chunk size
-	return conn.transport.SetOutChunkSize(size)
-}
-
 // SendWindowAckSize sends a WindowAckSize message
 func SendWindowAckSize(conn *Conn, size uint32) error {
 	buffer := buf.NewFromPool(4)

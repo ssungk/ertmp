@@ -25,7 +25,7 @@ func HandleConnect(conn *Conn, msg *transport.Message) error {
 	if err := SendSetPeerBW(conn, conn.config.PeerBandwidth, 2); err != nil {
 		return err
 	}
-	if err := SendSetChunkSize(conn, conn.config.ChunkSize); err != nil {
+	if err := conn.SetChunkSize(conn.config.ChunkSize); err != nil {
 		return err
 	}
 
