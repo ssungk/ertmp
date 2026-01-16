@@ -14,11 +14,13 @@ func ClientHandshake(rw io.ReadWriter) error {
 		return fmt.Errorf("handshake c0: %w: %w", ErrRtmpWrite, err)
 	}
 
-	// Send C1 (random bytes)
+	// Send C1 (time + zero + random bytes)
 	c1 := make([]byte, HandshakeSize)
-	// crypto/rand.Read rarely fails in normal environments (panics on failure)
-	// Error check omitted for 100% coverage
-	_, _ = rand.Read(c1)
+	// First 4 bytes: time (epoch seconds)
+	// Note: Using 0 is valid for simple handshake
+	// Second 4 bytes: zero
+	// Remaining 1528 bytes: random
+	_, _ = rand.Read(c1[8:])
 	if _, err := rw.Write(c1); err != nil {
 		return fmt.Errorf("handshake c1: %w: %w", ErrRtmpWrite, err)
 	}
@@ -78,11 +80,13 @@ func ServerHandshake(rw io.ReadWriter) error {
 		return fmt.Errorf("handshake s0: %w: %w", ErrRtmpWrite, err)
 	}
 
-	// Send S1 (random bytes)
+	// Send S1 (time + zero + random bytes)
 	s1 := make([]byte, HandshakeSize)
-	// crypto/rand.Read rarely fails in normal environments (panics on failure)
-	// Error check omitted for 100% test coverage
-	_, _ = rand.Read(s1)
+	// First 4 bytes: time (epoch seconds)
+	// Note: Using 0 is valid for simple handshake
+	// Second 4 bytes: zero
+	// Remaining 1528 bytes: random
+	_, _ = rand.Read(s1[8:])
 	if _, err := rw.Write(s1); err != nil {
 		return fmt.Errorf("handshake s1: %w: %w", ErrRtmpWrite, err)
 	}

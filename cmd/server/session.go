@@ -54,7 +54,6 @@ func (s *Session) Run() {
 			msg.Release()
 			break
 		}
-
 		msg.Release()
 	}
 
@@ -106,7 +105,11 @@ func (s *Session) handleCommand(msg *transport.Message) error {
 
 	case "deleteStream":
 		slog.Info("Stream deleted")
-		return s.Close()
+		err := s.Close()
+		if err != nil {
+			slog.Error("Failed to close session", "error", err)
+		}
+		return err
 
 	default:
 		slog.Debug("Unknown command", "name", cmd.Name)
@@ -196,7 +199,8 @@ func (s *Session) handlePlay(msg *transport.Message, cmd *rtmp.Command) error {
 	stream := s.server.GetOrCreateStream(playCmd.StreamKey)
 	stream.AddSubscriber(s)
 
-	// publisher가 있으면 metadata 전송
+	// publisher가 있으면 초기화 데이터 전송
+	// 1. Metadata
 	if metadata := stream.GetMetadata(); metadata != nil {
 		header := transport.NewMessageHeader(s.streamID, 0, transport.MsgTypeAMF0Data)
 		rtmpMsg := transport.NewMessage(header, metadata)
@@ -204,6 +208,28 @@ func (s *Session) handlePlay(msg *transport.Message, cmd *rtmp.Command) error {
 			slog.Error("Failed to send metadata", "error", err)
 		}
 		rtmpMsg.Release()
+	}
+
+	// 2. Video sequence header
+	if videoSeqHeader := stream.GetVideoSeqHeader(); videoSeqHeader != nil {
+		header := transport.NewMessageHeader(s.streamID, 0, transport.MsgTypeVideo)
+		rtmpMsg := transport.NewMessage(header, videoSeqHeader)
+		if err := s.conn.WriteMessage(rtmpMsg); err != nil {
+			slog.Error("Failed to send video sequence header", "error", err)
+		}
+		rtmpMsg.Release()
+		slog.Info("Video sequence header sent", "streamKey", playCmd.StreamKey)
+	}
+
+	// 3. Audio sequence header
+	if audioSeqHeader := stream.GetAudioSeqHeader(); audioSeqHeader != nil {
+		header := transport.NewMessageHeader(s.streamID, 0, transport.MsgTypeAudio)
+		rtmpMsg := transport.NewMessage(header, audioSeqHeader)
+		if err := s.conn.WriteMessage(rtmpMsg); err != nil {
+			slog.Error("Failed to send audio sequence header", "error", err)
+		}
+		rtmpMsg.Release()
+		slog.Info("Audio sequence header sent", "streamKey", playCmd.StreamKey)
 	}
 
 	slog.Info("Play started",
@@ -215,38 +241,52 @@ func (s *Session) handlePlay(msg *transport.Message, cmd *rtmp.Command) error {
 
 // handleVideo handles video data
 func (s *Session) handleVideo(msg *transport.Message) {
-	// publish 모드가 아니면 무시
-	if s.mode != "publish" || s.streamKey == "" {
-		return
-	}
+	// Sequence header 감지 (FrameType=1, CodecID=7, AVCPacketType=0)
+	data := msg.Data()
+	if len(data) >= 2 {
+		frameType := (data[0] >> 4) & 0x0F
+		codecID := data[0] & 0x0F
+		avcPacketType := data[1]
 
-	slog.Debug("Video data",
-		"bytes", len(msg.Data()),
-		"timestamp", msg.Timestamp(),
-		"streamKey", s.streamKey)
-
-	// 모든 subscribers에게 전송
-	stream := s.server.GetOrCreateStream(s.streamKey)
-	subscribers := stream.GetSubscribers()
-
-	for _, sub := range subscribers {
-		// 버퍼를 공유하는 새 메시지 생성 (zero-copy)
-		sharedMsg := msg.Share(sub.streamID)
-		if err := sub.conn.WriteMessage(sharedMsg); err != nil {
-			slog.Error("Failed to send video to subscriber", "error", err)
+		// AVC sequence header (H.264)
+		if frameType == 1 && codecID == 7 && avcPacketType == 0 {
+			stream := s.server.GetOrCreateStream(s.streamKey)
+			stream.SetVideoSeqHeader(data)
+			slog.Info("Video sequence header cached", "streamKey", s.streamKey, "bytes", len(data))
 		}
-		sharedMsg.Release()
 	}
+
+	s.broadcastToSubscribers(msg, "video")
 }
 
 // handleAudio handles audio data
 func (s *Session) handleAudio(msg *transport.Message) {
+	// Sequence header 감지 (SoundFormat=10, AACPacketType=0)
+	data := msg.Data()
+	if len(data) >= 2 {
+		soundFormat := (data[0] >> 4) & 0x0F
+		aacPacketType := data[1]
+
+		// AAC sequence header
+		if soundFormat == 10 && aacPacketType == 0 {
+			stream := s.server.GetOrCreateStream(s.streamKey)
+			stream.SetAudioSeqHeader(data)
+			slog.Info("Audio sequence header cached", "streamKey", s.streamKey, "bytes", len(data))
+		}
+	}
+
+	s.broadcastToSubscribers(msg, "audio")
+}
+
+// broadcastToSubscribers broadcasts media data to all subscribers
+func (s *Session) broadcastToSubscribers(msg *transport.Message, mediaType string) {
 	// publish 모드가 아니면 무시
 	if s.mode != "publish" || s.streamKey == "" {
 		return
 	}
 
-	slog.Debug("Audio data",
+	slog.Debug("Media data",
+		"type", mediaType,
 		"bytes", len(msg.Data()),
 		"timestamp", msg.Timestamp(),
 		"streamKey", s.streamKey)
@@ -259,7 +299,7 @@ func (s *Session) handleAudio(msg *transport.Message) {
 		// 버퍼를 공유하는 새 메시지 생성 (zero-copy)
 		sharedMsg := msg.Share(sub.streamID)
 		if err := sub.conn.WriteMessage(sharedMsg); err != nil {
-			slog.Error("Failed to send audio to subscriber", "error", err)
+			slog.Error("Failed to send to subscriber", "type", mediaType, "error", err)
 		}
 		sharedMsg.Release()
 	}
