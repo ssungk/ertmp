@@ -1,6 +1,7 @@
 package rtmp
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
@@ -82,7 +83,20 @@ func (c *Conn) ReadMessage() (*transport.Message, error) {
 }
 
 // WriteMessage writes a message to the connection
+// Protocol control messages that require state synchronization cannot be sent directly
 func (c *Conn) WriteMessage(msg *transport.Message) error {
+	// Prevent direct sending of protocol control messages that have dedicated methods
+	switch msg.Type() {
+	case transport.MsgTypeSetChunkSize:
+		return fmt.Errorf("cannot send SetChunkSize directly: use conn.SetChunkSize() instead")
+	case transport.MsgTypeWindowAckSize:
+		return fmt.Errorf("cannot send WindowAckSize directly: use conn.SetWindowAckSize() instead")
+	case transport.MsgTypeSetPeerBW:
+		return fmt.Errorf("cannot send SetPeerBandwidth directly: use conn.SetPeerBandwidth() instead")
+	case transport.MsgTypeAcknowledgement:
+		return fmt.Errorf("Acknowledgement messages are sent automatically by the Transport layer")
+	}
+
 	return c.transport.WriteMessage(msg)
 }
 
