@@ -15,6 +15,12 @@ func newMessageAssembler() *MessageAssembler {
 	return &MessageAssembler{}
 }
 
+// startNewMessage initializes a new message with header and allocates buffer
+func (ma *MessageAssembler) startNewMessage(header MessageHeader) {
+	ma.messageHeader = header
+	ma.buffer = buf.NewFromPool(int(header.MessageLength))
+}
+
 // nextBuffer returns a buffer slice for the next chunk data
 func (ma *MessageAssembler) nextBuffer(size uint32) []byte {
 	return ma.buffer.Data()[ma.bytesRead : ma.bytesRead+size]
