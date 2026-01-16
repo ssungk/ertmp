@@ -137,11 +137,6 @@ func (w *Writer) Flush() error {
 	return w.conn.Flush()
 }
 
-// BytesWritten returns the total number of bytes written to the socket
-func (w *Writer) BytesWritten() uint64 {
-	return w.conn.BytesWritten()
-}
-
 // determineFormatType determines the optimal format type
 func (w *Writer) determineFormatType(prevHeader, currHeader MessageHeader) uint8 {
 	if prevHeader.MessageStreamID != currHeader.MessageStreamID {

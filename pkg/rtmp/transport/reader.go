@@ -113,11 +113,6 @@ func (r *Reader) SetChunkSize(size uint32) error {
 	return nil
 }
 
-// BytesRead returns the total number of bytes read from the socket
-func (r *Reader) BytesRead() uint64 {
-	return r.conn.BytesRead()
-}
-
 // ClearChunkStream clears partially received message for a chunk stream
 func (r *Reader) ClearChunkStream(csid uint32) {
 	ma := r.assemblers[csid]

@@ -167,11 +167,6 @@ func (t *Transport) sendAcknowledgement(bytesRead uint64) error {
 	return t.WriteMessage(msg)
 }
 
-// SetInChunkSize sets the incoming chunk size
-func (t *Transport) SetInChunkSize(size uint32) error {
-	return t.reader.SetChunkSize(size)
-}
-
 // SetOutChunkSize sets the outgoing chunk size
 func (t *Transport) SetOutChunkSize(size uint32) error {
 	return t.writer.SetChunkSize(size)
