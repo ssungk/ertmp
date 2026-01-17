@@ -51,30 +51,26 @@ func (r *Reader) readChunk() (uint32, error) {
 	}
 
 	// fmt에 따라 메시지 헤더 읽기
-	msgHeader, err := readMessageHeader(r.conn, basicHeader.fmt, &ma.prevHeader)
+	msgHeader, err := readMessageHeader(r.conn, basicHeader.fmt, ma.header())
 	if err != nil {
 		return 0, fmt.Errorf("chunk message header: %w: %w", ErrRtmpRead, err)
 	}
 
 	// 새 메시지 시작: 헤더 갱신 및 버퍼 할당
-	if ma.bytesRead == 0 {
-		ma.startNewMessage(msgHeader)
+	if ma.isNewMessage() {
+		ma.startMessage(msgHeader)
 	}
 
 	// 청크 데이터 크기 계산
-	remainingBytes := ma.messageHeader.MessageLength - ma.bytesRead
-	chunkDataSize := min(r.chunkSize, remainingBytes)
+	chunkDataSize := min(r.chunkSize, ma.remainingBytes())
 
 	// 청크 데이터를 메시지 버퍼에 직접 읽기
 	if _, err := io.ReadFull(r.conn, ma.nextBuffer(chunkDataSize)); err != nil {
 		return 0, fmt.Errorf("chunk data: %w: %w", ErrRtmpRead, err)
 	}
 
-	// 읽은 바이트 수 업데이트
-	ma.bytesRead += chunkDataSize
-
-	// 이전 헤더 업데이트 (다음 청크를 위해, FmtType3이 참조함)
-	ma.prevHeader = msgHeader
+	// 청크 데이터 읽기 완료: 읽은 바이트 수 업데이트
+	ma.addBytes(chunkDataSize)
 
 	// 청크 스트림 ID 반환
 	return basicHeader.chunkStreamID, nil
@@ -90,10 +86,7 @@ func (r *Reader) getReadyMessage(csid uint32) *Message {
 
 	// 완성된 메시지 생성 (버퍼 소유권 이전)
 	buffer := ma.moveBuffer()
-	msg := NewMessageFromBuffer(ma.messageHeader, buffer)
-
-	// 이전 헤더 업데이트 (다음 메시지를 위해)
-	ma.prevHeader = ma.messageHeader
+	msg := NewMessageFromBuffer(*ma.header(), buffer)
 
 	return msg
 }
