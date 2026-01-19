@@ -8,9 +8,9 @@ const (
 	MaxChunkSize               = 0xFFFFFF   // 16777215
 	ChunkSizeMsgMask           = 0x7FFFFFFF // SetChunkSize message: MSB must be 0 (31-bit value)
 	IOBufferSize               = 8192       // 8KB
-	DefaultWindowAckSize       = 2500000
-	DefaultPeerBandwidth       = 2500000
-	ExtendedTimestampThreshold = 0xFFFFFF
+	DefaultWindowAckSize    = 2500000
+	DefaultPeerBandwidth    = 2500000
+	ExtTimestampThreshold   = 0xFFFFFF
 )
 
 // Message Type IDs

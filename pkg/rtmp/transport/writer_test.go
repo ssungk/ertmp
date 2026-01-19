@@ -5,16 +5,16 @@ import (
 	"testing"
 )
 
-// TestWriterExtendedTimestamp_Basic tests Extended Timestamp support
-func TestWriterExtendedTimestamp_Basic(t *testing.T) {
+// TestWriterExtTimestamp_Basic tests Extended Timestamp support
+func TestWriterExtTimestamp_Basic(t *testing.T) {
 	// Create test connection
 	conn := newTestConn()
 	mc := newMeteredConn(conn)
 	writer := NewWriter(mc)
 
 	// Create message with Extended Timestamp
-	// ExtendedTimestampThreshold = 0xFFFFFF
-	extTimestamp := uint32(ExtendedTimestampThreshold + 1000)
+	// ExtTimestampThreshold = 0xFFFFFF
+	extTimestamp := uint32(ExtTimestampThreshold + 1000)
 	data := []byte("test data with extended timestamp")
 
 	header := NewMessageHeader(1, extTimestamp, MsgTypeAMF0Command)
@@ -61,16 +61,16 @@ func TestWriterExtendedTimestamp_Basic(t *testing.T) {
 	t.Logf("Extended Timestamp test passed: timestamp=0x%X (%d)", extTimestamp, extTimestamp)
 }
 
-// TestWriterExtendedTimestamp_Boundary tests timestamp at boundary
-func TestWriterExtendedTimestamp_Boundary(t *testing.T) {
+// TestWriterExtTimestamp_Boundary tests timestamp at boundary
+func TestWriterExtTimestamp_Boundary(t *testing.T) {
 	testCases := []struct {
 		name      string
 		timestamp uint32
 	}{
-		{"Below threshold", ExtendedTimestampThreshold - 1},
-		{"At threshold", ExtendedTimestampThreshold},
-		{"Just above threshold", ExtendedTimestampThreshold + 1},
-		{"Far above threshold", ExtendedTimestampThreshold + 100000},
+		{"Below threshold", ExtTimestampThreshold - 1},
+		{"At threshold", ExtTimestampThreshold},
+		{"Just above threshold", ExtTimestampThreshold + 1},
+		{"Far above threshold", ExtTimestampThreshold + 100000},
 		{"Max uint32", 0xFFFFFFFF},
 	}
 
@@ -126,15 +126,15 @@ func TestWriterExtendedTimestamp_Boundary(t *testing.T) {
 	}
 }
 
-// TestWriterExtendedTimestamp_MultiChunk tests Extended Timestamp with large messages
-func TestWriterExtendedTimestamp_MultiChunk(t *testing.T) {
+// TestWriterExtTimestamp_MultiChunk tests Extended Timestamp with large messages
+func TestWriterExtTimestamp_MultiChunk(t *testing.T) {
 	// Create test connection
 	conn := newTestConn()
 	mc := newMeteredConn(conn)
 	writer := NewWriter(mc)
 
 	// Create large message (10 chunks)
-	extTimestamp := uint32(ExtendedTimestampThreshold + 5000)
+	extTimestamp := uint32(ExtTimestampThreshold + 5000)
 	chunkSize := DefaultChunkSize
 	dataSize := int(chunkSize * 10)
 	data := make([]byte, dataSize)
@@ -190,13 +190,13 @@ func TestWriterExtendedTimestamp_MultiChunk(t *testing.T) {
 		dataSize/int(chunkSize), extTimestamp)
 }
 
-// TestWriterExtendedTimestamp_RoundTrip tests various timestamp values
-func TestWriterExtendedTimestamp_RoundTrip(t *testing.T) {
+// TestWriterExtTimestamp_RoundTrip tests various timestamp values
+func TestWriterExtTimestamp_RoundTrip(t *testing.T) {
 	testTimestamps := []uint32{
 		0,
 		1000,
 		0xFFFFFE,              // Just below threshold
-		0xFFFFFF,              // At threshold (ExtendedTimestampThreshold)
+		0xFFFFFF,              // At threshold (ExtTimestampThreshold)
 		0xFFFFFF + 1,          // Just above threshold
 		0xFFFFFF + 1000000,    // Far above threshold
 		ChunkSizeMsgMask,      // Max int32 (0x7FFFFFFF)
@@ -337,8 +337,8 @@ func TestWriterTimestampDelta_Extended(t *testing.T) {
 	writer := NewWriter(mc)
 
 	// Send two messages with Extended Timestamp deltas
-	ts1 := uint32(ExtendedTimestampThreshold + 1000)
-	ts2 := uint32(ExtendedTimestampThreshold + 2000) // delta = 1000
+	ts1 := uint32(ExtTimestampThreshold + 1000)
+	ts2 := uint32(ExtTimestampThreshold + 2000) // delta = 1000
 
 	data1 := []byte("first message with extended timestamp")
 	header1 := NewMessageHeader(1, ts1, MsgTypeAMF0Command)
@@ -417,7 +417,7 @@ func TestWriterTimestampDelta_LargeDelta(t *testing.T) {
 
 	// Send two messages with large delta
 	ts1 := uint32(1000)
-	ts2 := uint32(ExtendedTimestampThreshold + 5000) // delta > 0xFFFFFF
+	ts2 := uint32(ExtTimestampThreshold + 5000) // delta > 0xFFFFFF
 
 	data1 := []byte("first")
 	header1 := NewMessageHeader(1, ts1, MsgTypeAMF0Command)
@@ -476,15 +476,15 @@ func TestWriterTimestampDelta_LargeDelta(t *testing.T) {
 	t.Logf("Large Delta test passed: ts1=%d, ts2=0x%X, delta=0x%X", ts1, ts2, ts2-ts1)
 }
 
-// TestWriterFmtType3_ExtendedTimestamp tests FmtType3 with Extended Timestamp in continuation chunks
-func TestWriterFmtType3_ExtendedTimestamp(t *testing.T) {
+// TestWriterFmtType3_ExtTimestamp tests FmtType3 with Extended Timestamp in continuation chunks
+func TestWriterFmtType3_ExtTimestamp(t *testing.T) {
 	// Create test connection
 	conn := newTestConn()
 	mc := newMeteredConn(conn)
 	writer := NewWriter(mc)
 
 	// Create message with Extended Timestamp that spans 2 chunks
-	extTimestamp := uint32(ExtendedTimestampThreshold + 1000)
+	extTimestamp := uint32(ExtTimestampThreshold + 1000)
 	chunkSize := DefaultChunkSize // 128
 	dataSize := int(chunkSize + 50) // 178 bytes, spans 2 chunks
 	data := make([]byte, dataSize)

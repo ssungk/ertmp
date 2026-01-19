@@ -62,9 +62,9 @@ func (w *Writer) WriteMessage(msg *Message) error {
 	}
 
 	// Extended Timestamp 플래그 설정
-	if headerToWrite.Timestamp >= ExtendedTimestampThreshold ||
-		headerToWrite.TimestampDelta >= ExtendedTimestampThreshold {
-		headerToWrite.hasExtendedTimestamp = true
+	if headerToWrite.Timestamp >= ExtTimestampThreshold ||
+		headerToWrite.TimestampDelta >= ExtTimestampThreshold {
+		headerToWrite.hasExtTimestamp = true
 	}
 
 	// 메시지 데이터 획득
@@ -108,7 +108,7 @@ func (w *Writer) WriteMessage(msg *Message) error {
 			}
 
 			// Extended Timestamp 처리 (첫 청크가 사용했다면 매 청크마다)
-			if headerToWrite.hasExtendedTimestamp {
+			if headerToWrite.hasExtTimestamp {
 				extTs := make([]byte, 4)
 				binary.BigEndian.PutUint32(extTs, headerToWrite.TimestampDelta)
 				if _, err := w.conn.Write(extTs); err != nil {

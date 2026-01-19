@@ -20,8 +20,8 @@ func (ma *MessageAssembler) startMessage(header MessageHeader) {
 	ma.buffer = buf.NewFromPool(int(header.MessageLength))
 }
 
-// isNewMessage returns true if this is the start of a new message
-func (ma *MessageAssembler) isNewMessage() bool {
+// isFirstChunk returns true if this is the first chunk of a message
+func (ma *MessageAssembler) isFirstChunk() bool {
 	return ma.bytesRead == 0
 }
 

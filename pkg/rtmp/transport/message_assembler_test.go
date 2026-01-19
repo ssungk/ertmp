@@ -10,8 +10,8 @@ func TestMessageAssembler_SingleChunkMessage(t *testing.T) {
 	header := NewMessageHeader(1, 1000, MsgTypeAudio)
 	header.MessageLength = 50
 
-	if !ma.isNewMessage() {
-		t.Fatal("expected new message state")
+	if !ma.isFirstChunk() {
+		t.Fatal("expected first chunk state")
 	}
 
 	ma.startMessage(header)
@@ -40,8 +40,8 @@ func TestMessageAssembler_SingleChunkMessage(t *testing.T) {
 		t.Fatal("moveBuffer returned nil")
 	}
 
-	if !ma.isNewMessage() {
-		t.Error("expected new message state after move")
+	if !ma.isFirstChunk() {
+		t.Error("expected first chunk state after move")
 	}
 
 	// Verify data sample
@@ -71,8 +71,8 @@ func TestMessageAssembler_MultiChunkMessage(t *testing.T) {
 	if ma.isComplete() {
 		t.Error("should not be complete after chunk 1")
 	}
-	if ma.isNewMessage() {
-		t.Error("should not be new message after chunk 1")
+	if ma.isFirstChunk() {
+		t.Error("should not be first chunk after chunk 1")
 	}
 
 	// Chunk 2: 128 bytes
@@ -134,8 +134,8 @@ func TestMessageAssembler_PartialMessageClear(t *testing.T) {
 	if ma.buffer != nil {
 		t.Error("buffer should be nil after clear")
 	}
-	if !ma.isNewMessage() {
-		t.Error("expected new message state after clear")
+	if !ma.isFirstChunk() {
+		t.Error("expected first chunk state after clear")
 	}
 
 	// Safe to call clear again

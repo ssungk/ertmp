@@ -51,13 +51,13 @@ func (r *Reader) readChunk() (uint32, error) {
 	}
 
 	// fmt에 따라 메시지 헤더 읽기
-	msgHeader, err := readMessageHeader(r.conn, basicHeader.fmt, ma.header())
+	msgHeader, err := readMessageHeader(r.conn, basicHeader.fmt, ma.isFirstChunk(), ma.header())
 	if err != nil {
 		return 0, fmt.Errorf("chunk message header: %w: %w", ErrRtmpRead, err)
 	}
 
 	// 새 메시지 시작: 헤더 갱신 및 버퍼 할당
-	if ma.isNewMessage() {
+	if ma.isFirstChunk() {
 		ma.startMessage(msgHeader)
 	}
 
