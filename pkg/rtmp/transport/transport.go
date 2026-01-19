@@ -33,6 +33,11 @@ func NewTransport(rwc io.ReadWriteCloser) *Transport {
 	}
 }
 
+// Close closes the transport
+func (t *Transport) Close() error {
+	return t.rwc.Close()
+}
+
 // ReadMessage reads a message and handles protocol control automatically
 func (t *Transport) ReadMessage() (*Message, error) {
 	msg, err := t.reader.ReadMessage()
@@ -228,11 +233,6 @@ func (t *Transport) SetPeerBandwidth(size uint32, limitType uint8) error {
 
 	// Update local peer bandwidth (no state needed on send side)
 	return nil
-}
-
-// Close closes the transport
-func (t *Transport) Close() error {
-	return t.rwc.Close()
 }
 
 // parseUserControl parses UserControl message data

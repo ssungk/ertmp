@@ -21,18 +21,6 @@ func NewWriter(mc *meteredConn) *Writer {
 	}
 }
 
-// SetChunkSize sets the chunk size for writing
-func (w *Writer) SetChunkSize(size uint32) error {
-	if size > MaxChunkSize {
-		return fmt.Errorf("chunk size %d exceeds maximum %d", size, MaxChunkSize)
-	}
-	if size < 1 {
-		return fmt.Errorf("chunk size must be at least 1")
-	}
-	w.chunkSize = size
-	return nil
-}
-
 // WriteMessage writes a complete RTMP message
 func (w *Writer) WriteMessage(msg *Message) error {
 	// 청크 스트림 ID 결정
@@ -135,6 +123,18 @@ func (w *Writer) WriteMessage(msg *Message) error {
 // Flush flushes the writer
 func (w *Writer) Flush() error {
 	return w.conn.Flush()
+}
+
+// SetChunkSize sets the chunk size for writing
+func (w *Writer) SetChunkSize(size uint32) error {
+	if size > MaxChunkSize {
+		return fmt.Errorf("chunk size %d exceeds maximum %d", size, MaxChunkSize)
+	}
+	if size < 1 {
+		return fmt.Errorf("chunk size must be at least 1")
+	}
+	w.chunkSize = size
+	return nil
 }
 
 // determineFormatType determines the optimal format type

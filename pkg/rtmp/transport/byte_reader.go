@@ -50,27 +50,6 @@ func readUint24BE(r io.ByteReader) (uint32, error) {
 	return uint32(b0)<<16 | uint32(b1)<<8 | uint32(b2), nil
 }
 
-// readUint32BE reads 4 bytes and returns as uint32 (big endian)
-func readUint32BE(r io.ByteReader) (uint32, error) {
-	b0, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	b1, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	b2, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	b3, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	return uint32(b0)<<24 | uint32(b1)<<16 | uint32(b2)<<8 | uint32(b3), nil
-}
-
 // readUint32LE reads 4 bytes and returns as uint32 (little endian)
 func readUint32LE(r io.ByteReader) (uint32, error) {
 	b0, err := r.ReadByte()
@@ -90,4 +69,25 @@ func readUint32LE(r io.ByteReader) (uint32, error) {
 		return 0, err
 	}
 	return uint32(b0) | uint32(b1)<<8 | uint32(b2)<<16 | uint32(b3)<<24, nil
+}
+
+// readUint32BE reads 4 bytes and returns as uint32 (big endian)
+func readUint32BE(r io.ByteReader) (uint32, error) {
+	b0, err := r.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	b1, err := r.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	b2, err := r.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	b3, err := r.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	return uint32(b0)<<24 | uint32(b1)<<16 | uint32(b2)<<8 | uint32(b3), nil
 }
