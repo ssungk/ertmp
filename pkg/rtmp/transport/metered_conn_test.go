@@ -147,3 +147,7 @@ func (brw *testBytesReadWriter) Read(p []byte) (int, error) {
 func (brw *testBytesReadWriter) Write(p []byte) (int, error) {
 	return brw.Buffer.Write(p)
 }
+
+func (brw *testBytesReadWriter) Close() error {
+	return nil
+}

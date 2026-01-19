@@ -10,7 +10,6 @@ import (
 
 // Transport represents a bidirectional RTMP protocol handler
 type Transport struct {
-	rwc    io.ReadWriteCloser
 	conn   *meteredConn
 	reader *Reader
 	writer *Writer
@@ -25,7 +24,6 @@ type Transport struct {
 func NewTransport(rwc io.ReadWriteCloser) *Transport {
 	mc := newMeteredConn(rwc)
 	return &Transport{
-		rwc:           rwc,
 		conn:          mc,
 		reader:        NewReader(mc),
 		writer:        NewWriter(mc),
@@ -35,7 +33,7 @@ func NewTransport(rwc io.ReadWriteCloser) *Transport {
 
 // Close closes the transport
 func (t *Transport) Close() error {
-	return t.rwc.Close()
+	return t.conn.Close()
 }
 
 // ReadMessage reads a message and handles protocol control automatically

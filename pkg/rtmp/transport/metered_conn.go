@@ -11,17 +11,19 @@ import (
 // Not thread-safe: designed for single-goroutine usage.
 type meteredConn struct {
 	*bufio.ReadWriter
+	rwc          io.ReadWriteCloser
 	bytesRead    uint64
 	bytesWritten uint64
 }
 
 // newMeteredConn creates a new metered connection
-func newMeteredConn(rw io.ReadWriter) *meteredConn {
+func newMeteredConn(rwc io.ReadWriteCloser) *meteredConn {
 	return &meteredConn{
 		ReadWriter: bufio.NewReadWriter(
-			bufio.NewReaderSize(rw, IOBufferSize),
-			bufio.NewWriterSize(rw, IOBufferSize),
+			bufio.NewReaderSize(rwc, IOBufferSize),
+			bufio.NewWriterSize(rwc, IOBufferSize),
 		),
+		rwc: rwc,
 	}
 }
 
@@ -76,4 +78,9 @@ func (mc *meteredConn) BytesRead() uint64 {
 // BytesWritten returns the total number of bytes written
 func (mc *meteredConn) BytesWritten() uint64 {
 	return mc.bytesWritten
+}
+
+// Close closes the underlying connection
+func (mc *meteredConn) Close() error {
+	return mc.rwc.Close()
 }
