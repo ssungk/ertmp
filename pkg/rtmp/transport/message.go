@@ -8,25 +8,13 @@ type Message struct {
 	buffer *buf.Buffer
 }
 
-// NewMessage creates a new message with data (copies data into pooled buffer)
-func NewMessage(header MessageHeader, data []byte) *Message {
-	header.MessageLength = uint32(len(data))
-
-	// Allocate buffer from pool
-	buffer := buf.NewFromPool(len(data))
-	copy(buffer.Data(), data)
-
-	return &Message{
-		Header: header,
-		buffer: buffer,
-	}
-}
-
-// NewMessageFromBuffer creates a message from existing buffer (zero-copy)
-func NewMessageFromBuffer(header MessageHeader, buffer *buf.Buffer) *Message {
+// NewMessage creates a message from existing buffer (zero-copy).
+// Takes ownership of the buffer - caller must not use buffer after this.
+// To share the buffer, call buffer.Retain() before passing it.
+func NewMessage(header MessageHeader, buffer *buf.Buffer) Message {
 	header.MessageLength = uint32(buffer.Len())
 
-	return &Message{
+	return Message{
 		Header: header,
 		buffer: buffer,
 	}
@@ -34,14 +22,7 @@ func NewMessageFromBuffer(header MessageHeader, buffer *buf.Buffer) *Message {
 
 // Data returns the payload bytes
 func (m *Message) Data() []byte {
-	if m.buffer == nil {
-		return nil
-	}
-	data := m.buffer.Data()
-	if uint32(len(data)) > m.Header.MessageLength {
-		return data[:m.Header.MessageLength]
-	}
-	return data
+	return m.buffer.Data()
 }
 
 // Type returns the message type ID
@@ -59,32 +40,8 @@ func (m *Message) Timestamp() uint32 {
 	return m.Header.Timestamp
 }
 
-// Retain increments the reference count
-func (m *Message) Retain() {
-	if m.buffer != nil {
-		m.buffer.Retain()
-	}
-}
-
-// Share creates a new message sharing the same buffer with different streamID (zero-copy)
-func (m *Message) Share(streamID uint32) *Message {
-	// Increment reference count on buffer
-	if m.buffer != nil {
-		m.buffer.Retain()
-	}
-
-	header := NewMessageHeader(streamID, m.Header.Timestamp, m.Header.MessageTypeID)
-	header.MessageLength = m.Header.MessageLength
-
-	return &Message{
-		Header: header,
-		buffer: m.buffer, // Share same buffer pointer
-	}
-}
-
-// Release releases buffer back to pool
-func (m *Message) Release() {
-	if m.buffer != nil {
-		m.buffer.Release()
-	}
+// Buffer returns the underlying buffer.
+// Use buffer.Retain() and buffer.Release() to manage reference counting.
+func (m *Message) Buffer() *buf.Buffer {
+	return m.buffer
 }

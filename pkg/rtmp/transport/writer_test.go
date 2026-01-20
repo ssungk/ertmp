@@ -3,6 +3,8 @@ package transport
 import (
 	"bytes"
 	"testing"
+
+	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 )
 
 // TestWriterExtTimestamp_Basic tests Extended Timestamp support
@@ -18,7 +20,7 @@ func TestWriterExtTimestamp_Basic(t *testing.T) {
 	data := []byte("test data with extended timestamp")
 
 	header := NewMessageHeader(1, extTimestamp, MsgTypeAMF0Command)
-	msg := NewMessage(header, data)
+	msg := NewMessage(header, buf.New(data))
 
 	// Write message
 	if err := writer.WriteMessage(msg); err != nil {
@@ -30,7 +32,7 @@ func TestWriterExtTimestamp_Basic(t *testing.T) {
 		t.Fatalf("Flush failed: %v", err)
 	}
 
-	msg.Release()
+	msg.Buffer().Release()
 
 	// Copy writeBuf to readBuf for reading
 	conn.readBuf.Write(conn.writeBuf.Bytes())
@@ -44,7 +46,7 @@ func TestWriterExtTimestamp_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage failed: %v", err)
 	}
-	defer receivedMsg.Release()
+	defer receivedMsg.Buffer().Release()
 
 	// Verify timestamp
 	if receivedMsg.Timestamp() != extTimestamp {
@@ -83,7 +85,7 @@ func TestWriterExtTimestamp_Boundary(t *testing.T) {
 
 			data := []byte("boundary test")
 			header := NewMessageHeader(1, tc.timestamp, MsgTypeAMF0Command)
-			msg := NewMessage(header, data)
+			msg := NewMessage(header, buf.New(data))
 
 			// Write message
 			if err := writer.WriteMessage(msg); err != nil {
@@ -94,7 +96,7 @@ func TestWriterExtTimestamp_Boundary(t *testing.T) {
 				t.Fatalf("Flush failed: %v", err)
 			}
 
-			msg.Release()
+			msg.Buffer().Release()
 
 			// Copy writeBuf to readBuf for reading
 			conn.readBuf.Write(conn.writeBuf.Bytes())
@@ -108,7 +110,7 @@ func TestWriterExtTimestamp_Boundary(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadMessage failed: %v", err)
 			}
-			defer receivedMsg.Release()
+			defer receivedMsg.Buffer().Release()
 
 			// Verify timestamp
 			if receivedMsg.Timestamp() != tc.timestamp {
@@ -143,7 +145,7 @@ func TestWriterExtTimestamp_MultiChunk(t *testing.T) {
 	}
 
 	header := NewMessageHeader(1, extTimestamp, MsgTypeAMF0Data)
-	msg := NewMessage(header, data)
+	msg := NewMessage(header, buf.New(data))
 
 	// Write message
 	if err := writer.WriteMessage(msg); err != nil {
@@ -154,7 +156,7 @@ func TestWriterExtTimestamp_MultiChunk(t *testing.T) {
 		t.Fatalf("Flush failed: %v", err)
 	}
 
-	msg.Release()
+	msg.Buffer().Release()
 
 	// Copy writeBuf to readBuf for reading
 	conn.readBuf.Write(conn.writeBuf.Bytes())
@@ -168,7 +170,7 @@ func TestWriterExtTimestamp_MultiChunk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage failed: %v", err)
 	}
-	defer receivedMsg.Release()
+	defer receivedMsg.Buffer().Release()
 
 	// Verify timestamp
 	if receivedMsg.Timestamp() != extTimestamp {
@@ -212,7 +214,7 @@ func TestWriterExtTimestamp_RoundTrip(t *testing.T) {
 
 			data := []byte("round-trip test")
 			header := NewMessageHeader(1, ts, MsgTypeAMF0Command)
-			msg := NewMessage(header, data)
+			msg := NewMessage(header, buf.New(data))
 
 			// Write
 			if err := writer.WriteMessage(msg); err != nil {
@@ -223,7 +225,7 @@ func TestWriterExtTimestamp_RoundTrip(t *testing.T) {
 				t.Fatalf("Flush failed for ts=0x%X: %v", ts, err)
 			}
 
-			msg.Release()
+			msg.Buffer().Release()
 
 			// Copy writeBuf to readBuf for reading
 			conn.readBuf.Write(conn.writeBuf.Bytes())
@@ -237,7 +239,7 @@ func TestWriterExtTimestamp_RoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadMessage failed for ts=0x%X: %v", ts, err)
 			}
-			defer receivedMsg.Release()
+			defer receivedMsg.Buffer().Release()
 
 			// Verify
 			if receivedMsg.Timestamp() != ts {
@@ -266,11 +268,11 @@ func TestWriterTimestampDelta_Basic(t *testing.T) {
 
 	data1 := []byte("first message")
 	header1 := NewMessageHeader(1, ts1, MsgTypeAMF0Command)
-	msg1 := NewMessage(header1, data1)
+	msg1 := NewMessage(header1, buf.New(data1))
 
 	data2 := []byte("second message")
 	header2 := NewMessageHeader(1, ts2, MsgTypeAMF0Command)
-	msg2 := NewMessage(header2, data2)
+	msg2 := NewMessage(header2, buf.New(data2))
 
 	// Write first message
 	if err := writer.WriteMessage(msg1); err != nil {
@@ -286,8 +288,8 @@ func TestWriterTimestampDelta_Basic(t *testing.T) {
 		t.Fatalf("Flush failed: %v", err)
 	}
 
-	msg1.Release()
-	msg2.Release()
+	msg1.Buffer().Release()
+	msg2.Buffer().Release()
 
 	// Copy writeBuf to readBuf for reading
 	conn.readBuf.Write(conn.writeBuf.Bytes())
@@ -301,7 +303,7 @@ func TestWriterTimestampDelta_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage msg1 failed: %v", err)
 	}
-	defer receivedMsg1.Release()
+	defer receivedMsg1.Buffer().Release()
 
 	if receivedMsg1.Timestamp() != ts1 {
 		t.Errorf("msg1 timestamp mismatch: expected %d, got %d", ts1, receivedMsg1.Timestamp())
@@ -316,7 +318,7 @@ func TestWriterTimestampDelta_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage msg2 failed: %v", err)
 	}
-	defer receivedMsg2.Release()
+	defer receivedMsg2.Buffer().Release()
 
 	if receivedMsg2.Timestamp() != ts2 {
 		t.Errorf("msg2 timestamp mismatch: expected %d, got %d", ts2, receivedMsg2.Timestamp())
@@ -342,11 +344,11 @@ func TestWriterTimestampDelta_Extended(t *testing.T) {
 
 	data1 := []byte("first message with extended timestamp")
 	header1 := NewMessageHeader(1, ts1, MsgTypeAMF0Command)
-	msg1 := NewMessage(header1, data1)
+	msg1 := NewMessage(header1, buf.New(data1))
 
 	data2 := []byte("second message with extended timestamp")
 	header2 := NewMessageHeader(1, ts2, MsgTypeAMF0Command)
-	msg2 := NewMessage(header2, data2)
+	msg2 := NewMessage(header2, buf.New(data2))
 
 	// Write first message
 	if err := writer.WriteMessage(msg1); err != nil {
@@ -362,8 +364,8 @@ func TestWriterTimestampDelta_Extended(t *testing.T) {
 		t.Fatalf("Flush failed: %v", err)
 	}
 
-	msg1.Release()
-	msg2.Release()
+	msg1.Buffer().Release()
+	msg2.Buffer().Release()
 
 	// Copy writeBuf to readBuf for reading
 	conn.readBuf.Write(conn.writeBuf.Bytes())
@@ -377,7 +379,7 @@ func TestWriterTimestampDelta_Extended(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage msg1 failed: %v", err)
 	}
-	defer receivedMsg1.Release()
+	defer receivedMsg1.Buffer().Release()
 
 	if receivedMsg1.Timestamp() != ts1 {
 		t.Errorf("msg1 timestamp mismatch: expected %d (0x%X), got %d (0x%X)",
@@ -393,7 +395,7 @@ func TestWriterTimestampDelta_Extended(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage msg2 failed: %v", err)
 	}
-	defer receivedMsg2.Release()
+	defer receivedMsg2.Buffer().Release()
 
 	if receivedMsg2.Timestamp() != ts2 {
 		t.Errorf("msg2 timestamp mismatch: expected %d (0x%X), got %d (0x%X)",
@@ -421,11 +423,11 @@ func TestWriterTimestampDelta_LargeDelta(t *testing.T) {
 
 	data1 := []byte("first")
 	header1 := NewMessageHeader(1, ts1, MsgTypeAMF0Command)
-	msg1 := NewMessage(header1, data1)
+	msg1 := NewMessage(header1, buf.New(data1))
 
 	data2 := []byte("second")
 	header2 := NewMessageHeader(1, ts2, MsgTypeAMF0Command)
-	msg2 := NewMessage(header2, data2)
+	msg2 := NewMessage(header2, buf.New(data2))
 
 	// Write messages
 	if err := writer.WriteMessage(msg1); err != nil {
@@ -440,8 +442,8 @@ func TestWriterTimestampDelta_LargeDelta(t *testing.T) {
 		t.Fatalf("Flush failed: %v", err)
 	}
 
-	msg1.Release()
-	msg2.Release()
+	msg1.Buffer().Release()
+	msg2.Buffer().Release()
 
 	// Copy writeBuf to readBuf for reading
 	conn.readBuf.Write(conn.writeBuf.Bytes())
@@ -455,13 +457,13 @@ func TestWriterTimestampDelta_LargeDelta(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage msg1 failed: %v", err)
 	}
-	defer receivedMsg1.Release()
+	defer receivedMsg1.Buffer().Release()
 
 	receivedMsg2, err := reader.ReadMessage()
 	if err != nil {
 		t.Fatalf("ReadMessage msg2 failed: %v", err)
 	}
-	defer receivedMsg2.Release()
+	defer receivedMsg2.Buffer().Release()
 
 	// Verify timestamps
 	if receivedMsg1.Timestamp() != ts1 {
@@ -493,7 +495,7 @@ func TestWriterFmtType3_ExtTimestamp(t *testing.T) {
 	}
 
 	header := NewMessageHeader(1, extTimestamp, MsgTypeAMF0Data)
-	msg := NewMessage(header, data)
+	msg := NewMessage(header, buf.New(data))
 
 	t.Logf("Sending message: timestamp=0x%X, size=%d bytes, chunks=2", extTimestamp, dataSize)
 
@@ -506,7 +508,7 @@ func TestWriterFmtType3_ExtTimestamp(t *testing.T) {
 		t.Fatalf("Flush failed: %v", err)
 	}
 
-	msg.Release()
+	msg.Buffer().Release()
 
 	t.Logf("Written %d bytes to writeBuf", conn.writeBuf.Len())
 
@@ -522,7 +524,7 @@ func TestWriterFmtType3_ExtTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage failed: %v", err)
 	}
-	defer receivedMsg.Release()
+	defer receivedMsg.Buffer().Release()
 
 	// Verify timestamp
 	if receivedMsg.Timestamp() != extTimestamp {

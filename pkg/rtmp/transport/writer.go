@@ -22,7 +22,7 @@ func NewWriter(mc *meteredConn) *Writer {
 }
 
 // WriteMessage writes a complete RTMP message
-func (w *Writer) WriteMessage(msg *Message) error {
+func (w *Writer) WriteMessage(msg Message) error {
 	// 청크 스트림 ID 결정
 	csid := w.getChunkStreamID(msg.Header.MessageTypeID)
 

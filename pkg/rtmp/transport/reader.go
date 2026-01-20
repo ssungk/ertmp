@@ -22,14 +22,14 @@ func NewReader(mc *meteredConn) *Reader {
 }
 
 // ReadMessage reads a complete RTMP message
-func (r *Reader) ReadMessage() (*Message, error) {
+func (r *Reader) ReadMessage() (Message, error) {
 	for {
 		csid, err := r.readChunk()
 		if err != nil {
-			return nil, err
+			return Message{}, err
 		}
 
-		if msg := r.getReadyMessage(csid); msg != nil {
+		if msg, ok := r.getReadyMessage(csid); ok {
 			return msg, nil
 		}
 	}
@@ -77,18 +77,18 @@ func (r *Reader) readChunk() (uint32, error) {
 }
 
 // getReadyMessage returns a completed message if available
-func (r *Reader) getReadyMessage(csid uint32) *Message {
+func (r *Reader) getReadyMessage(csid uint32) (Message, bool) {
 	// 완성된 메시지가 있는지 확인
 	ma := r.assemblers[csid]
 	if ma == nil || !ma.isComplete() {
-		return nil
+		return Message{}, false
 	}
 
 	// 완성된 메시지 생성 (버퍼 소유권 이전)
 	buffer := ma.moveBuffer()
-	msg := NewMessageFromBuffer(*ma.header(), buffer)
+	msg := NewMessage(*ma.header(), buffer)
 
-	return msg
+	return msg, true
 }
 
 // SetChunkSize sets the chunk size for reading

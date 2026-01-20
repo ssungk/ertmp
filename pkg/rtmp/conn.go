@@ -78,13 +78,13 @@ func (c *Conn) Streams() map[uint32]*Stream {
 
 // ReadMessage reads a message from the connection
 // 프로토콜 제어 메시지 (SetChunkSize 등)는 자동으로 내부 처리됨
-func (c *Conn) ReadMessage() (*transport.Message, error) {
+func (c *Conn) ReadMessage() (transport.Message, error) {
 	return c.transport.ReadMessage()
 }
 
 // WriteMessage writes a message to the connection
 // Protocol control messages that require state synchronization cannot be sent directly
-func (c *Conn) WriteMessage(msg *transport.Message) error {
+func (c *Conn) WriteMessage(msg transport.Message) error {
 	// Prevent direct sending of protocol control messages that have dedicated methods
 	switch msg.Type() {
 	case transport.MsgTypeSetChunkSize:

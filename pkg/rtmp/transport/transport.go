@@ -37,27 +37,27 @@ func (t *Transport) Close() error {
 }
 
 // ReadMessage reads a message and handles protocol control automatically
-func (t *Transport) ReadMessage() (*Message, error) {
+func (t *Transport) ReadMessage() (Message, error) {
 	msg, err := t.reader.ReadMessage()
 	if err != nil {
-		return nil, err
+		return Message{}, err
 	}
 
 	if err := t.handleProtocolControl(msg); err != nil {
-		msg.Release()
-		return nil, err
+		msg.Buffer().Release()
+		return Message{}, err
 	}
 
 	if err := t.handleAckWindow(); err != nil {
-		msg.Release()
-		return nil, err
+		msg.Buffer().Release()
+		return Message{}, err
 	}
 
 	return msg, nil
 }
 
 // WriteMessage writes a message with automatic flush
-func (t *Transport) WriteMessage(msg *Message) error {
+func (t *Transport) WriteMessage(msg Message) error {
 	if err := t.writer.WriteMessage(msg); err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (t *Transport) WriteMessage(msg *Message) error {
 }
 
 // handleProtocolControl handles protocol control messages
-func (t *Transport) handleProtocolControl(msg *Message) error {
+func (t *Transport) handleProtocolControl(msg Message) error {
 	switch msg.Type() {
 	case MsgTypeSetChunkSize:
 		if len(msg.Data()) != 4 {
@@ -106,7 +106,7 @@ func (t *Transport) handleProtocolControl(msg *Message) error {
 
 			// PingResponse 전송 (동일한 timestamp)
 			pongMsg := createUserControl(UserControlPingResponse, eventData)
-			defer pongMsg.Release()
+			defer pongMsg.Buffer().Release()
 
 			if err := t.WriteMessage(pongMsg); err != nil {
 				return fmt.Errorf("send PingResponse: %w", err)
@@ -163,8 +163,8 @@ func (t *Transport) sendAcknowledgement(bytesRead uint64) error {
 
 	// Create ACK message (StreamID=0, Timestamp=0, TypeID=Acknowledgement)
 	header := NewMessageHeader(0, 0, MsgTypeAcknowledgement)
-	msg := NewMessageFromBuffer(header, buffer)
-	defer msg.Release()
+	msg := NewMessage(header, buffer)
+	defer msg.Buffer().Release()
 
 	// Send message
 	return t.WriteMessage(msg)
@@ -182,8 +182,8 @@ func (t *Transport) SetOutChunkSize(size uint32) error {
 	binary.BigEndian.PutUint32(buffer.Data(), size&ChunkSizeMsgMask)
 
 	header := NewMessageHeader(0, 0, MsgTypeSetChunkSize)
-	msg := NewMessageFromBuffer(header, buffer)
-	defer msg.Release()
+	msg := NewMessage(header, buffer)
+	defer msg.Buffer().Release()
 
 	// Send message
 	if err := t.WriteMessage(msg); err != nil {
@@ -201,8 +201,8 @@ func (t *Transport) SetWindowAckSize(size uint32) error {
 	binary.BigEndian.PutUint32(buffer.Data(), size)
 
 	header := NewMessageHeader(0, 0, MsgTypeWindowAckSize)
-	msg := NewMessageFromBuffer(header, buffer)
-	defer msg.Release()
+	msg := NewMessage(header, buffer)
+	defer msg.Buffer().Release()
 
 	// Send message
 	if err := t.WriteMessage(msg); err != nil {
@@ -221,8 +221,8 @@ func (t *Transport) SetPeerBandwidth(size uint32, limitType uint8) error {
 	buffer.Data()[4] = limitType
 
 	header := NewMessageHeader(0, 0, MsgTypeSetPeerBW)
-	msg := NewMessageFromBuffer(header, buffer)
-	defer msg.Release()
+	msg := NewMessage(header, buffer)
+	defer msg.Buffer().Release()
 
 	// Send message
 	if err := t.WriteMessage(msg); err != nil {
@@ -244,11 +244,12 @@ func parseUserControl(data []byte) (eventType uint16, eventData []byte, err erro
 }
 
 // createUserControl creates a UserControl message
-func createUserControl(eventType uint16, eventData []byte) *Message {
+func createUserControl(eventType uint16, eventData []byte) Message {
 	data := make([]byte, 2+len(eventData))
 	binary.BigEndian.PutUint16(data[0:2], eventType)
 	copy(data[2:], eventData)
 
+	buffer := buf.New(data)
 	header := NewMessageHeader(0, 0, MsgTypeUserControl)
-	return NewMessage(header, data)
+	return NewMessage(header, buffer)
 }

@@ -27,7 +27,7 @@ func TestTransportAck_Disabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage failed: %v", err)
 	}
-	msg.Release()
+	msg.Buffer().Release()
 
 	// Verify bytesRead is updated
 	if transport.conn.BytesRead() == 0 {
@@ -64,7 +64,7 @@ func TestTransportAck_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage failed: %v", err)
 	}
-	msg.Release()
+	msg.Buffer().Release()
 
 	// Check bytesRead
 	bytesRead := transport.conn.BytesRead()
@@ -107,7 +107,7 @@ func TestTransportAck_MultipleAcks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage failed: %v", err)
 	}
-	msg.Release()
+	msg.Buffer().Release()
 
 	// Should receive 4 ACKs: 2.5MB, 5MB, 7.5MB, 10MB
 	expectedAcks := []uint32{
@@ -150,7 +150,7 @@ func TestTransportAck_MidStreamConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage 1 failed: %v", err)
 	}
-	msg1.Release()
+	msg1.Buffer().Release()
 
 	// No ACK should be sent yet
 	bytesReadBefore := transport.conn.BytesRead()
@@ -170,7 +170,7 @@ func TestTransportAck_MidStreamConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage 2 failed: %v", err)
 	}
-	msg2.Release()
+	msg2.Buffer().Release()
 
 	// ACK should be sent now
 	ackBytes, err := readAckMessage(conn.writeBuf)
@@ -204,7 +204,7 @@ func TestTransportAck_NoRetroactiveAcks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage 1 failed: %v", err)
 	}
-	msg1.Release()
+	msg1.Buffer().Release()
 
 	bytesReadBefore := transport.conn.BytesRead()
 	if conn.writeBuf.Len() > 0 {
@@ -224,7 +224,7 @@ func TestTransportAck_NoRetroactiveAcks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage 2 failed: %v", err)
 	}
-	msg2.Release()
+	msg2.Buffer().Release()
 
 	// ACK가 0개여야 함 (아직 다음 window boundary를 넘지 않음)
 	if conn.writeBuf.Len() > 0 {
@@ -273,13 +273,13 @@ func TestTransportAbort_ClearChunkStream(t *testing.T) {
 	abortPayload := make([]byte, 4)
 	binary.BigEndian.PutUint32(abortPayload, csid)
 	header := NewMessageHeader(0, 0, MsgTypeAbort)
-	abortMsg := NewMessage(header, abortPayload)
+	abortMsg := NewMessage(header, buf.New(abortPayload))
 
 	// Process abort
 	if err := transport.handleProtocolControl(abortMsg); err != nil {
 		t.Fatalf("handleProtocolControl failed: %v", err)
 	}
-	abortMsg.Release()
+	abortMsg.Buffer().Release()
 
 	// Verify assembler is cleared
 	if ma.bytesRead != 0 {
@@ -309,7 +309,7 @@ func TestTransportAbort_ClearChunkStream(t *testing.T) {
 		t.Errorf("expected first byte 100, got %d", receivedData[0])
 	}
 
-	msg.Release()
+	msg.Buffer().Release()
 	t.Logf("Abort message successfully cleared message assembler")
 }
 
@@ -446,7 +446,7 @@ func TestTransportPingPong_AutoResponse(t *testing.T) {
 	binary.BigEndian.PutUint32(pingData[2:6], timestamp)
 
 	header := NewMessageHeader(0, 0, MsgTypeUserControl)
-	pingMsg := NewMessage(header, pingData)
+	pingMsg := NewMessage(header, buf.New(pingData))
 
 	// Write PingRequest to readBuf
 	writePingMessage(conn.readBuf, pingData)
@@ -456,8 +456,8 @@ func TestTransportPingPong_AutoResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMessage failed: %v", err)
 	}
-	msg.Release()
-	pingMsg.Release()
+	msg.Buffer().Release()
+	pingMsg.Buffer().Release()
 
 	// Verify PingResponse was sent to writeBuf
 	if conn.writeBuf.Len() == 0 {
@@ -517,7 +517,7 @@ func TestTransportUserControl_IgnoreOtherEvents(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadMessage failed: %v", err)
 			}
-			msg.Release()
+			msg.Buffer().Release()
 
 			// Verify no response was sent
 			if conn.writeBuf.Len() > 0 {

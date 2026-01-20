@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ssungk/ertmp/pkg/amf"
+	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
 
@@ -203,7 +204,7 @@ func ParsePlay(cmd *Command) (*PlayCommand, error) {
 }
 
 // NewConnectResponseMessage creates a connect response message
-func NewConnectResponseMessage(txID float64, props map[string]interface{}) *transport.Message {
+func NewConnectResponseMessage(txID float64, props map[string]interface{}) transport.Message {
 	if props == nil {
 		props = make(map[string]interface{})
 	}
@@ -215,19 +216,21 @@ func NewConnectResponseMessage(txID float64, props map[string]interface{}) *tran
 	}
 
 	cmdData, _ := EncodeCommand("_result", txID, props, info)
+	buffer := buf.New(cmdData)
 	header := transport.NewMessageHeader(0, 0, transport.MsgTypeAMF0Command)
-	return transport.NewMessage(header, cmdData)
+	return transport.NewMessage(header, buffer)
 }
 
 // NewCreateStreamResponseMessage creates a createStream response message
-func NewCreateStreamResponseMessage(txID float64, streamID float64) *transport.Message {
+func NewCreateStreamResponseMessage(txID float64, streamID float64) transport.Message {
 	cmdData, _ := EncodeCommand("_result", txID, nil, streamID)
+	buffer := buf.New(cmdData)
 	header := transport.NewMessageHeader(0, 0, transport.MsgTypeAMF0Command)
-	return transport.NewMessage(header, cmdData)
+	return transport.NewMessage(header, buffer)
 }
 
 // NewOnStatusMessage creates an onStatus command message
-func NewOnStatusMessage(streamID uint32, level, code, description string) *transport.Message {
+func NewOnStatusMessage(streamID uint32, level, code, description string) transport.Message {
 	info := map[string]interface{}{
 		"level":       level,
 		"code":        code,
@@ -235,6 +238,7 @@ func NewOnStatusMessage(streamID uint32, level, code, description string) *trans
 	}
 
 	cmdData, _ := EncodeCommand("onStatus", 0, nil, info)
+	buffer := buf.New(cmdData)
 	header := transport.NewMessageHeader(streamID, 0, transport.MsgTypeAMF0Command)
-	return transport.NewMessage(header, cmdData)
+	return transport.NewMessage(header, buffer)
 }

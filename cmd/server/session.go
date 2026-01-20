@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/ssungk/ertmp/pkg/rtmp"
+	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
 
@@ -51,17 +52,17 @@ func (s *Session) Run() {
 
 		if err := s.handleMessage(msg); err != nil {
 			slog.Error("Failed to handle message", "error", err)
-			msg.Release()
+			msg.Buffer().Release()
 			break
 		}
-		msg.Release()
+		msg.Buffer().Release()
 	}
 
 	slog.Info("Client disconnected", "address", s.netConn.RemoteAddr())
 }
 
 // handleMessage handles a single message
-func (s *Session) handleMessage(msg *transport.Message) error {
+func (s *Session) handleMessage(msg transport.Message) error {
 	switch msg.Type() {
 	case transport.MsgTypeAMF0Command:
 		return s.handleCommand(msg)
@@ -83,7 +84,7 @@ func (s *Session) handleMessage(msg *transport.Message) error {
 }
 
 // handleCommand handles AMF command messages
-func (s *Session) handleCommand(msg *transport.Message) error {
+func (s *Session) handleCommand(msg transport.Message) error {
 	cmd, err := rtmp.DecodeCommand(msg.Data())
 	if err != nil {
 		slog.Warn("Failed to decode command", "error", err)
@@ -119,7 +120,7 @@ func (s *Session) handleCommand(msg *transport.Message) error {
 }
 
 // handleConnect handles connect command
-func (s *Session) handleConnect(msg *transport.Message, cmd *rtmp.Command) error {
+func (s *Session) handleConnect(msg transport.Message, cmd *rtmp.Command) error {
 	slog.Info("Connect request", "txID", cmd.TransactionID)
 
 	if err := rtmp.HandleConnect(s.conn, msg); err != nil {
@@ -132,7 +133,7 @@ func (s *Session) handleConnect(msg *transport.Message, cmd *rtmp.Command) error
 }
 
 // handleCreateStream handles createStream command
-func (s *Session) handleCreateStream(msg *transport.Message, cmd *rtmp.Command) error {
+func (s *Session) handleCreateStream(msg transport.Message, cmd *rtmp.Command) error {
 	slog.Info("CreateStream request", "txID", cmd.TransactionID)
 
 	stream, err := rtmp.HandleCreateStream(s.conn, msg)
@@ -146,7 +147,7 @@ func (s *Session) handleCreateStream(msg *transport.Message, cmd *rtmp.Command) 
 }
 
 // handlePublish handles publish command
-func (s *Session) handlePublish(msg *transport.Message, cmd *rtmp.Command) error {
+func (s *Session) handlePublish(msg transport.Message, cmd *rtmp.Command) error {
 	publishCmd, err := rtmp.ParsePublish(cmd)
 	if err != nil {
 		return err
@@ -178,7 +179,7 @@ func (s *Session) handlePublish(msg *transport.Message, cmd *rtmp.Command) error
 }
 
 // handlePlay handles play command
-func (s *Session) handlePlay(msg *transport.Message, cmd *rtmp.Command) error {
+func (s *Session) handlePlay(msg transport.Message, cmd *rtmp.Command) error {
 	playCmd, err := rtmp.ParsePlay(cmd)
 	if err != nil {
 		return err
@@ -202,33 +203,36 @@ func (s *Session) handlePlay(msg *transport.Message, cmd *rtmp.Command) error {
 	// publisher가 있으면 초기화 데이터 전송
 	// 1. Metadata
 	if metadata := stream.GetMetadata(); metadata != nil {
+		buffer := buf.New(metadata)
 		header := transport.NewMessageHeader(s.streamID, 0, transport.MsgTypeAMF0Data)
-		rtmpMsg := transport.NewMessage(header, metadata)
+		rtmpMsg := transport.NewMessage(header, buffer)
 		if err := s.conn.WriteMessage(rtmpMsg); err != nil {
 			slog.Error("Failed to send metadata", "error", err)
 		}
-		rtmpMsg.Release()
+		rtmpMsg.Buffer().Release()
 	}
 
 	// 2. Video sequence header
 	if videoSeqHeader := stream.GetVideoSeqHeader(); videoSeqHeader != nil {
+		buffer := buf.New(videoSeqHeader)
 		header := transport.NewMessageHeader(s.streamID, 0, transport.MsgTypeVideo)
-		rtmpMsg := transport.NewMessage(header, videoSeqHeader)
+		rtmpMsg := transport.NewMessage(header, buffer)
 		if err := s.conn.WriteMessage(rtmpMsg); err != nil {
 			slog.Error("Failed to send video sequence header", "error", err)
 		}
-		rtmpMsg.Release()
+		rtmpMsg.Buffer().Release()
 		slog.Info("Video sequence header sent", "streamKey", playCmd.StreamKey)
 	}
 
 	// 3. Audio sequence header
 	if audioSeqHeader := stream.GetAudioSeqHeader(); audioSeqHeader != nil {
+		buffer := buf.New(audioSeqHeader)
 		header := transport.NewMessageHeader(s.streamID, 0, transport.MsgTypeAudio)
-		rtmpMsg := transport.NewMessage(header, audioSeqHeader)
+		rtmpMsg := transport.NewMessage(header, buffer)
 		if err := s.conn.WriteMessage(rtmpMsg); err != nil {
 			slog.Error("Failed to send audio sequence header", "error", err)
 		}
-		rtmpMsg.Release()
+		rtmpMsg.Buffer().Release()
 		slog.Info("Audio sequence header sent", "streamKey", playCmd.StreamKey)
 	}
 
@@ -240,7 +244,7 @@ func (s *Session) handlePlay(msg *transport.Message, cmd *rtmp.Command) error {
 }
 
 // handleVideo handles video data
-func (s *Session) handleVideo(msg *transport.Message) {
+func (s *Session) handleVideo(msg transport.Message) {
 	// Sequence header 감지 (FrameType=1, CodecID=7, AVCPacketType=0)
 	data := msg.Data()
 	if len(data) >= 2 {
@@ -260,7 +264,7 @@ func (s *Session) handleVideo(msg *transport.Message) {
 }
 
 // handleAudio handles audio data
-func (s *Session) handleAudio(msg *transport.Message) {
+func (s *Session) handleAudio(msg transport.Message) {
 	// Sequence header 감지 (SoundFormat=10, AACPacketType=0)
 	data := msg.Data()
 	if len(data) >= 2 {
@@ -279,7 +283,7 @@ func (s *Session) handleAudio(msg *transport.Message) {
 }
 
 // broadcastToSubscribers broadcasts media data to all subscribers
-func (s *Session) broadcastToSubscribers(msg *transport.Message, mediaType string) {
+func (s *Session) broadcastToSubscribers(msg transport.Message, mediaType string) {
 	// publish 모드가 아니면 무시
 	if s.mode != "publish" || s.streamKey == "" {
 		return
@@ -297,16 +301,19 @@ func (s *Session) broadcastToSubscribers(msg *transport.Message, mediaType strin
 
 	for _, sub := range subscribers {
 		// 버퍼를 공유하는 새 메시지 생성 (zero-copy)
-		sharedMsg := msg.Share(sub.streamID)
+		buffer := msg.Buffer()
+		buffer.Retain()
+		header := transport.NewMessageHeader(sub.streamID, msg.Timestamp(), msg.Type())
+		sharedMsg := transport.NewMessage(header, buffer)
 		if err := sub.conn.WriteMessage(sharedMsg); err != nil {
 			slog.Error("Failed to send to subscriber", "type", mediaType, "error", err)
 		}
-		sharedMsg.Release()
+		sharedMsg.Buffer().Release()
 	}
 }
 
 // handleMetadata handles metadata
-func (s *Session) handleMetadata(msg *transport.Message) {
+func (s *Session) handleMetadata(msg transport.Message) {
 	// publish 모드가 아니면 무시
 	if s.mode != "publish" || s.streamKey == "" {
 		return
@@ -325,11 +332,14 @@ func (s *Session) handleMetadata(msg *transport.Message) {
 
 	for _, sub := range subscribers {
 		// 버퍼를 공유하는 새 메시지 생성 (zero-copy)
-		sharedMsg := msg.Share(sub.streamID)
+		buffer := msg.Buffer()
+		buffer.Retain()
+		header := transport.NewMessageHeader(sub.streamID, msg.Timestamp(), msg.Type())
+		sharedMsg := transport.NewMessage(header, buffer)
 		if err := sub.conn.WriteMessage(sharedMsg); err != nil {
 			slog.Error("Failed to send metadata to subscriber", "error", err)
 		}
-		sharedMsg.Release()
+		sharedMsg.Buffer().Release()
 	}
 }
 

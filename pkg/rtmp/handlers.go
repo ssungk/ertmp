@@ -7,7 +7,7 @@ import (
 )
 
 // HandleConnect handles a connect command (server side)
-func HandleConnect(conn *Conn, msg *transport.Message) error {
+func HandleConnect(conn *Conn, msg transport.Message) error {
 	cmd, err := DecodeCommand(msg.Data())
 	if err != nil {
 		return fmt.Errorf("failed to decode connect command: %w", err)
@@ -48,7 +48,7 @@ func HandleConnect(conn *Conn, msg *transport.Message) error {
 }
 
 // HandleCreateStream handles a createStream command (server side)
-func HandleCreateStream(conn *Conn, msg *transport.Message) (*Stream, error) {
+func HandleCreateStream(conn *Conn, msg transport.Message) (*Stream, error) {
 	cmd, err := DecodeCommand(msg.Data())
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode createStream command: %w", err)
@@ -66,7 +66,7 @@ func HandleCreateStream(conn *Conn, msg *transport.Message) (*Stream, error) {
 }
 
 // HandlePublish handles a publish command (server side)
-func HandlePublish(conn *Conn, msg *transport.Message) error {
+func HandlePublish(conn *Conn, msg transport.Message) error {
 	cmd, err := DecodeCommand(msg.Data())
 	if err != nil {
 		return fmt.Errorf("failed to decode publish command: %w", err)
@@ -92,7 +92,7 @@ func HandlePublish(conn *Conn, msg *transport.Message) error {
 }
 
 // HandlePlay handles a play command (server side)
-func HandlePlay(conn *Conn, msg *transport.Message) error {
+func HandlePlay(conn *Conn, msg transport.Message) error {
 	cmd, err := DecodeCommand(msg.Data())
 	if err != nil {
 		return fmt.Errorf("failed to decode play command: %w", err)
