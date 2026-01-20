@@ -5,20 +5,49 @@ A Go library implementation of the Real-Time Messaging Protocol (RTMP) with plan
 ## Status
 
 **Current**: RTMP basic implementation completed
-- ✅ RTMP handshake
+- ✅ RTMP handshake (C0/C1/C2/S0/S1/S2)
 - ✅ Chunk-based I/O (Reader/Writer)
-- ✅ Transport layer with protocol control messages
-- ✅ Automatic acknowledgement and window size handling
-- ✅ Abort message support for canceling partial messages
+- ✅ Transport layer with automatic protocol control message handling
+- ✅ Automatic acknowledgement and window size management
+- ✅ Abort message support for canceling partial chunks
+- ✅ Ping/Pong auto-response for connection keep-alive
+- ✅ Extended Timestamp support (streams > 4.6 hours)
 - ✅ Reference-counted buffer management with pooling
-- ✅ Connection management
-- ✅ AMF0 encoding/decoding
-- ✅ Command messages (connect, publish, play)
+- ✅ Connection and stream management
+- ✅ AMF0/AMF3 encoding/decoding
+- ✅ Command messages (connect, createStream, publish, play)
 - ✅ Video/Audio/Metadata streaming
 
 **Future**: Enhanced RTMP (E-RTMP) features planned
 - Multiple video/audio codecs (HEVC, AV1, VP9, Opus)
 - FourCC-based codec negotiation
+
+## Features
+
+### Core RTMP Protocol
+- **Complete RTMP handshake** (C0/C1/C2 and S0/S1/S2)
+- **Chunk-based streaming** with configurable chunk sizes
+- **Type 0/1/2/3 chunk headers** with optimal header compression
+- **Extended Timestamp support** for long-running streams (>4.6 hours)
+- **Message interleaving** for concurrent streams
+
+### Automatic Protocol Handling
+- **Auto-acknowledgement**: Sends ACK messages based on window size
+- **Auto-response to ping**: Keeps connections alive automatically
+- **Protocol control encapsulation**: Safe APIs prevent state corruption
+- **Abort message handling**: Properly clears partial chunks
+
+### Performance Optimizations
+- **Zero-copy buffer sharing**: Messages share buffers across streams
+- **Tiered memory pools**: Efficient allocation with 5 pool sizes
+- **Reference counting**: Automatic buffer lifecycle management
+- **Minimal allocations**: Reuses buffers and headers where possible
+
+### Safety & Correctness
+- **Value-type messages**: Prevents accidental null pointer dereferences
+- **Explicit buffer ownership**: Clear lifecycle with Retain/Release
+- **No circular dependencies**: Clean architecture with layer separation
+- **Pit of success design**: Hard to misuse APIs
 
 ## Requirements
 
@@ -94,17 +123,19 @@ The RTMP implementation is split into two clear layers:
 
 1. **Transport Layer** (`pkg/rtmp/transport/`)
    - Low-level I/O operations
-   - Chunk-based reading/writing
-   - Protocol control messages
-   - Message framing
+   - Chunk-based reading/writing with message assembly
+   - **Automatic protocol control message handling**
+     - Incoming: SetChunkSize, WindowAckSize, Abort, UserControl
+     - Outgoing: Acknowledgement auto-send, PingResponse auto-reply
+   - Message framing and buffering
    - Independent, reusable components
 
 2. **RTMP Layer** (`pkg/rtmp/`)
    - High-level RTMP API
-   - Connection management
-   - Command encoding/decoding
-   - Stream management
-   - Business logic
+   - Connection and stream management
+   - Safe protocol control methods (SetChunkSize, SetWindowAckSize, SetPeerBandwidth)
+   - Command encoding/decoding (connect, publish, play)
+   - Application-level business logic
 
 ### Design Principles
 
@@ -119,12 +150,120 @@ The RTMP implementation is split into two clear layers:
 #### Buffer Management (`pkg/rtmp/buf/`)
 - **Reference-counted buffers**: Automatic memory management using atomic reference counting
 - **Tiered memory pools**: Multiple pool sizes (32B, 512B, 4KB, 16KB, 64KB) for efficient allocation
-- **Zero-copy sharing**: Messages can share buffers across streams without copying
+- **Explicit lifecycle management**: Use `buffer.Retain()` to share, `buffer.Release()` to free
+- **Zero-copy sharing**: Multiple messages can share the same buffer without copying data
+
+```go
+// Example: Sharing a buffer across streams
+buffer := msg.Buffer()
+buffer.Retain()  // Increment reference count
+header := transport.NewMessageHeader(newStreamID, timestamp, msgType)
+sharedMsg := transport.NewMessage(header, buffer)
+// Both msg and sharedMsg now share the same buffer
+```
+
+#### Message Type (`pkg/rtmp/transport/`)
+- **Value type**: `Message` is a struct (not pointer) for better performance
+- **Buffer ownership**: `NewMessage(header, buffer)` takes ownership of buffer
+- **Explicit buffer access**: Use `msg.Buffer()` to access underlying buffer for lifecycle management
+- **Zero-copy transfer**: Pass buffers directly without intermediate copying
+
+```go
+// Creating a message
+data := []byte("payload")
+buffer := buf.New(data)  // Wrap data in pooled buffer
+header := transport.NewMessageHeader(streamID, timestamp, msgType)
+msg := transport.NewMessage(header, buffer)  // Takes ownership
+
+// Release when done
+defer msg.Buffer().Release()
+```
 
 #### Message Assembly (`pkg/rtmp/transport/`)
 - **MessageAssembler**: Reconstructs complete messages from interleaved chunks
 - **Per-stream state**: Maintains separate assembly state for each chunk stream ID
 - **Direct buffer writes**: Chunks are read directly into pre-allocated message buffers
+- **Header caching**: Reuses message headers across Type 3 chunks for efficiency
+
+## Usage Example
+
+### Basic Server
+
+```go
+package main
+
+import (
+    "log"
+    "net"
+
+    "github.com/ssungk/ertmp/pkg/rtmp"
+    "github.com/ssungk/ertmp/pkg/rtmp/transport"
+)
+
+func main() {
+    listener, err := net.Listen("tcp", ":1935")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer listener.Close()
+
+    for {
+        netConn, err := listener.Accept()
+        if err != nil {
+            continue
+        }
+
+        go handleConnection(netConn)
+    }
+}
+
+func handleConnection(netConn net.Conn) {
+    defer netConn.Close()
+
+    // RTMP handshake
+    if err := transport.Handshake(netConn, true); err != nil {
+        log.Printf("Handshake failed: %v", err)
+        return
+    }
+
+    // Create RTMP connection
+    conn := rtmp.NewConn(netConn, rtmp.DefaultConfig())
+    defer conn.Close()
+
+    // Read and handle messages
+    for {
+        msg, err := conn.ReadMessage()
+        if err != nil {
+            break
+        }
+
+        // Handle message based on type
+        switch msg.Type() {
+        case transport.MsgTypeAMF0Command:
+            handleCommand(conn, msg)
+        case transport.MsgTypeVideo:
+            handleVideo(msg)
+        case transport.MsgTypeAudio:
+            handleAudio(msg)
+        }
+
+        msg.Buffer().Release()  // Always release buffers
+    }
+}
+```
+
+### Protocol Control
+
+```go
+// Set chunk size (must use dedicated method, not WriteMessage)
+conn.SetChunkSize(4096)
+
+// Set window acknowledgement size
+conn.SetWindowAckSize(2500000)
+
+// Set peer bandwidth
+conn.SetPeerBandwidth(2500000, transport.LimitTypeDynamic)
+```
 
 ## Testing with FFmpeg
 
@@ -143,6 +282,45 @@ ffplay rtmp://localhost:1935/live/stream
 ```bash
 ffprobe rtmp://localhost:1935/live/stream
 ```
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+### Code Quality
+- Write tests for new features
+- Maintain test coverage above 80%
+- Follow Go best practices and idioms
+- Use `go fmt` and `go vet` before committing
+
+### Buffer Management
+- Always use buffer pools (`buf.New()`, `buf.NewFromPool()`)
+- Call `buffer.Release()` when done with buffers
+- Use `buffer.Retain()` when sharing buffers
+- Test buffer lifecycle carefully to avoid leaks
+
+### Architecture
+- Respect layer separation (Transport vs RTMP)
+- Keep Transport layer independent and reusable
+- Use safe protocol control APIs, don't bypass them
+- Avoid circular dependencies
+
+## Roadmap
+
+### Short-term
+- [ ] Increase test coverage to 80%+
+- [ ] Add CI/CD with GitHub Actions
+- [ ] Improve AMF encoder buffer pool usage
+- [ ] Add more integration tests
+
+### Long-term
+- [ ] Client API implementation
+- [ ] Enhanced RTMP (E-RTMP) support
+  - HEVC/H.265 codec
+  - AV1 codec
+  - VP9 codec
+  - Opus audio codec
+- [ ] Performance benchmarks and optimizations
 
 ## License
 
