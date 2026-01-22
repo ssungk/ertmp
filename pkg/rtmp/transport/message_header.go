@@ -25,96 +25,90 @@ func NewMessageHeader(streamID, timestamp uint32, typeID uint8) MessageHeader {
 }
 
 // WriteTo writes the message header to writer based on format type
-func (h MessageHeader) WriteTo(w io.Writer, fmtType uint8) (int64, error) {
+// Uses stack buffer internally to avoid heap allocation
+func (h *MessageHeader) WriteTo(w io.Writer, fmtType uint8) (int64, error) {
+	var buf [15]byte
+	n := writeMessageHeaderToBuffer(buf[:], *h, fmtType)
+	if n == 0 {
+		return 0, nil
+	}
+	written, err := w.Write(buf[:n])
+	return int64(written), err
+}
+
+// writeMessageHeaderToBuffer writes message header to buffer (zero heap allocation)
+// Returns number of bytes written
+func writeMessageHeaderToBuffer(buf []byte, h MessageHeader, fmtType uint8) int {
 	switch fmtType {
 	case FmtType0:
-		// 전체 헤더 (11바이트 + Extended Timestamp 4바이트)
+		// 11바이트 헤더
 		ts := h.Timestamp
 		hasExtTimestamp := ts >= ExtTimestampThreshold
 		if hasExtTimestamp {
 			ts = ExtTimestampThreshold
 		}
-		
-		data := make([]byte, 11)
-		WriteUint24BE(data[0:3], ts)
-		WriteUint24BE(data[3:6], h.MessageLength)
-		data[6] = h.MessageTypeID
-		binary.LittleEndian.PutUint32(data[7:11], h.MessageStreamID)
-		n, err := w.Write(data)
-		if err != nil {
-			return int64(n), err
-		}
-		
+
+		WriteUint24BE(buf[0:3], ts)
+		WriteUint24BE(buf[3:6], h.MessageLength)
+		buf[6] = h.MessageTypeID
+		binary.LittleEndian.PutUint32(buf[7:11], h.MessageStreamID)
+
+		n := 11
 		// Extended Timestamp (4바이트, 필요 시)
 		if hasExtTimestamp {
-			extTs := make([]byte, 4)
-			binary.BigEndian.PutUint32(extTs, h.Timestamp)
-			n2, err := w.Write(extTs)
-			return int64(n) + int64(n2), err
+			binary.BigEndian.PutUint32(buf[11:15], h.Timestamp)
+			n += 4
 		}
-		
-		return int64(n), nil
-	
+		return n
+
 	case FmtType1:
-		// 동일한 스트림 ID (7바이트 + Extended Timestamp 4바이트)
-		// FmtType1은 Timestamp Delta를 사용
+		// 7바이트 헤더
 		delta := h.TimestampDelta
 		hasExtTimestamp := delta >= ExtTimestampThreshold
 		if hasExtTimestamp {
 			delta = ExtTimestampThreshold
 		}
-		
-		data := make([]byte, 7)
-		WriteUint24BE(data[0:3], delta)
-		WriteUint24BE(data[3:6], h.MessageLength)
-		data[6] = h.MessageTypeID
-		n, err := w.Write(data)
-		if err != nil {
-			return int64(n), err
-		}
-		
+
+		WriteUint24BE(buf[0:3], delta)
+		WriteUint24BE(buf[3:6], h.MessageLength)
+		buf[6] = h.MessageTypeID
+
+		n := 7
 		// Extended Timestamp (delta, 4바이트, 필요 시)
 		if hasExtTimestamp {
-			extTs := make([]byte, 4)
-			binary.BigEndian.PutUint32(extTs, h.TimestampDelta)
-			n2, err := w.Write(extTs)
-			return int64(n) + int64(n2), err
+			binary.BigEndian.PutUint32(buf[7:11], h.TimestampDelta)
+			n += 4
 		}
-		
-		return int64(n), nil
-	
+		return n
+
 	case FmtType2:
-		// 동일한 길이와 스트림 ID (3바이트 + Extended Timestamp 4바이트)
-		// FmtType2는 Timestamp Delta를 사용
+		// 3바이트 헤더
 		delta := h.TimestampDelta
 		hasExtTimestamp := delta >= ExtTimestampThreshold
 		if hasExtTimestamp {
 			delta = ExtTimestampThreshold
 		}
-		
-		data := make([]byte, 3)
-		WriteUint24BE(data[0:3], delta)
-		n, err := w.Write(data)
-		if err != nil {
-			return int64(n), err
-		}
-		
+
+		WriteUint24BE(buf[0:3], delta)
+
+		n := 3
 		// Extended Timestamp (delta, 4바이트, 필요 시)
 		if hasExtTimestamp {
-			extTs := make([]byte, 4)
-			binary.BigEndian.PutUint32(extTs, h.TimestampDelta)
-			n2, err := w.Write(extTs)
-			return int64(n) + int64(n2), err
+			binary.BigEndian.PutUint32(buf[3:7], h.TimestampDelta)
+			n += 4
 		}
-		
-		return int64(n), nil
-	
+		return n
+
 	case FmtType3:
-		// 헤더 없음 (0바이트)
-		return 0, nil
-	
+		// Extended Timestamp만 (헤더 없음)
+		if h.hasExtTimestamp {
+			binary.BigEndian.PutUint32(buf[0:4], h.TimestampDelta)
+			return 4
+		}
+		return 0
+
 	default:
-		return 0, nil
+		return 0
 	}
 }
 
@@ -141,25 +135,25 @@ func readMessageHeaderFmt0(r io.ByteReader) (mh MessageHeader, err error) {
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// MessageLength (3 bytes)
 	mh.MessageLength, err = readUint24BE(r)
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// MessageTypeID (1 byte)
 	mh.MessageTypeID, err = r.ReadByte()
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// MessageStreamID (4 bytes, little endian)
 	mh.MessageStreamID, err = readUint32LE(r)
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// Extended Timestamp (4 bytes) - read after all header fields
 	mh.hasExtTimestamp = hasExtTimestamp(timestamp)
 	timestamp, err = readExtTimestamp(r, mh.hasExtTimestamp, timestamp)
@@ -179,25 +173,25 @@ func readMessageHeaderFmt1(r io.ByteReader, isFirstChunk bool, prevHeader *Messa
 	if prevHeader == nil {
 		return mh, ErrNoPreviousHeader
 	}
-	
+
 	// TimestampDelta (3 bytes)
 	timestampDelta, err := readUint24BE(r)
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// MessageLength (3 bytes)
 	mh.MessageLength, err = readUint24BE(r)
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// MessageTypeID (1 byte)
 	mh.MessageTypeID, err = r.ReadByte()
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// Extended Timestamp (4 bytes) - read after all header fields
 	mh.hasExtTimestamp = hasExtTimestamp(timestampDelta)
 	timestampDelta, err = readExtTimestamp(r, mh.hasExtTimestamp, timestampDelta)
@@ -217,13 +211,13 @@ func readMessageHeaderFmt2(r io.ByteReader, isFirstChunk bool, prevHeader *Messa
 	if prevHeader == nil {
 		return mh, ErrNoPreviousHeader
 	}
-	
+
 	// TimestampDelta (3 bytes)
 	timestampDelta, err := readUint24BE(r)
 	if err != nil {
 		return mh, err
 	}
-	
+
 	// Extended Timestamp (4 bytes) - read after all header fields
 	mh.hasExtTimestamp = hasExtTimestamp(timestampDelta)
 	timestampDelta, err = readExtTimestamp(r, mh.hasExtTimestamp, timestampDelta)
@@ -245,7 +239,7 @@ func readMessageHeaderFmt3(r io.ByteReader, isFirstChunk bool, prevHeader *Messa
 	if prevHeader == nil {
 		return mh, ErrNoPreviousHeader
 	}
-	
+
 	mh.MessageLength = prevHeader.MessageLength
 	mh.MessageTypeID = prevHeader.MessageTypeID
 	mh.MessageStreamID = prevHeader.MessageStreamID

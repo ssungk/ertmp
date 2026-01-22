@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"encoding/binary"
 	"fmt"
 )
 
@@ -10,6 +9,7 @@ type Writer struct {
 	conn        *meteredConn
 	prevHeaders map[uint32]MessageHeader
 	chunkSize   uint32
+	headerBuf   [15]byte // 헤더 버퍼 (최대 11바이트 + 4바이트 ext ts)
 }
 
 // NewWriter creates a new RTMP writer
@@ -25,12 +25,12 @@ func NewWriter(mc *meteredConn) *Writer {
 func (w *Writer) WriteMessage(msg Message) error {
 	// 청크 스트림 ID 결정
 	csid := w.getChunkStreamID(msg.Header.MessageTypeID)
-
+	
 	// 포맷 타입 결정 및 헤더 준비
 	prevHeader, exists := w.prevHeaders[csid]
 	var fmtType uint8
 	var headerToWrite MessageHeader
-
+	
 	if !exists {
 		fmtType = FmtType0 // 첫 메시지는 전체 헤더
 		headerToWrite = msg.Header
@@ -39,7 +39,7 @@ func (w *Writer) WriteMessage(msg Message) error {
 	} else {
 		fmtType = w.determineFormatType(prevHeader, msg.Header)
 		headerToWrite = msg.Header
-
+		
 		// Delta 계산 (FmtType1/2에서 사용)
 		if fmtType == FmtType1 || fmtType == FmtType2 {
 			headerToWrite.TimestampDelta = msg.Header.Timestamp - prevHeader.Timestamp
@@ -48,24 +48,24 @@ func (w *Writer) WriteMessage(msg Message) error {
 			headerToWrite.TimestampDelta = msg.Header.Timestamp
 		}
 	}
-
+	
 	// Extended Timestamp 플래그 설정
 	if headerToWrite.Timestamp >= ExtTimestampThreshold ||
 		headerToWrite.TimestampDelta >= ExtTimestampThreshold {
 		headerToWrite.hasExtTimestamp = true
 	}
-
+	
 	// 메시지 데이터 획득
 	data := msg.Data()
 	if data == nil {
 		data = []byte{}
 	}
-
+	
 	// 청크 단위로 메시지 작성
 	totalBytes := uint32(len(data))
 	bytesWritten := uint32(0)
 	isFirstChunk := true
-
+	
 	for bytesWritten < totalBytes {
 		// 청크 크기 계산
 		remainingBytes := totalBytes - bytesWritten
@@ -73,7 +73,7 @@ func (w *Writer) WriteMessage(msg Message) error {
 		if remainingBytes < chunkDataSize {
 			chunkDataSize = remainingBytes
 		}
-
+		
 		// 청크 헤더 작성
 		if isFirstChunk {
 			// 기본 헤더 작성
@@ -82,41 +82,37 @@ func (w *Writer) WriteMessage(msg Message) error {
 				return fmt.Errorf("chunk basic header: %w: %w", ErrRtmpWrite, err)
 			}
 
-			// 메시지 헤더 작성
-			if _, err := headerToWrite.WriteTo(w.conn, fmtType); err != nil {
+			// 메시지 헤더 작성 (zero heap allocation)
+			if err := w.writeMessageHeader(headerToWrite, fmtType); err != nil {
 				return fmt.Errorf("chunk message header: %w: %w", ErrRtmpWrite, err)
 			}
 
 			isFirstChunk = false
 		} else {
-			// 연속 헤더 작성 (fmt 3)
+			// 연속 청크 (FmtType3)
 			basicHeader := newBasicHeader(FmtType3, csid)
 			if _, err := basicHeader.WriteTo(w.conn); err != nil {
 				return fmt.Errorf("chunk continuation header: %w: %w", ErrRtmpWrite, err)
 			}
 
-			// Extended Timestamp 처리 (첫 청크가 사용했다면 매 청크마다)
-			if headerToWrite.hasExtTimestamp {
-				extTs := make([]byte, 4)
-				binary.BigEndian.PutUint32(extTs, headerToWrite.TimestampDelta)
-				if _, err := w.conn.Write(extTs); err != nil {
-					return fmt.Errorf("chunk continuation extended timestamp: %w: %w", ErrRtmpWrite, err)
-				}
+			// Extended Timestamp 처리 (zero heap allocation)
+			if err := w.writeMessageHeader(headerToWrite, FmtType3); err != nil {
+				return fmt.Errorf("chunk continuation extended timestamp: %w: %w", ErrRtmpWrite, err)
 			}
 		}
-
+		
 		// 청크 데이터 작성
 		chunkData := data[bytesWritten : bytesWritten+chunkDataSize]
 		if _, err := w.conn.Write(chunkData); err != nil {
 			return fmt.Errorf("chunk data: %w: %w", ErrRtmpWrite, err)
 		}
-
+		
 		bytesWritten += chunkDataSize
 	}
-
+	
 	// 이전 헤더 업데이트
 	w.prevHeaders[csid] = headerToWrite
-
+	
 	return nil
 }
 
@@ -179,4 +175,14 @@ func (w *Writer) WriteByte(b byte) error {
 // Write writes data
 func (w *Writer) Write(p []byte) (int, error) {
 	return w.conn.Write(p)
+}
+
+// writeMessageHeader writes message header using internal buffer (zero heap allocation)
+func (w *Writer) writeMessageHeader(h MessageHeader, fmtType uint8) error {
+	n := writeMessageHeaderToBuffer(w.headerBuf[:], h, fmtType)
+	if n == 0 {
+		return nil
+	}
+	_, err := w.conn.Write(w.headerBuf[:n])
+	return err
 }
