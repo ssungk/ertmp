@@ -18,39 +18,29 @@ func newBasicHeader(fmt uint8, chunkStreamID uint32) basicHeader {
 	}
 }
 
-// WriteTo writes the basic header to writer
-func (h *basicHeader) WriteTo(w io.ByteWriter) (int, error) {
+// writeBasicHeader writes the basic header to writer
+func writeBasicHeader(w io.ByteWriter, h basicHeader) error {
 	if h.chunkStreamID < 64 {
 		// 1바이트 헤더: fmt(2bit) + csid(6bit)
-		err := w.WriteByte((h.fmt << 6) | byte(h.chunkStreamID))
-		if err != nil {
-			return 0, err
-		}
-		return 1, nil
+		return w.WriteByte((h.fmt << 6) | byte(h.chunkStreamID))
 
 	} else if h.chunkStreamID < 320 {
 		// 2바이트 헤더: fmt(2bit) + 0(6bit) + csid-64(8bit)
 		if err := w.WriteByte((h.fmt << 6) | 0); err != nil {
-			return 0, err
+			return err
 		}
-		if err := w.WriteByte(byte(h.chunkStreamID - 64)); err != nil {
-			return 1, err
-		}
-		return 2, nil
+		return w.WriteByte(byte(h.chunkStreamID - 64))
 
 	} else {
 		// 3바이트 헤더: fmt(2bit) + 1(6bit) + csid-64(16bit little-endian)
 		csid := h.chunkStreamID - 64
 		if err := w.WriteByte((h.fmt << 6) | 1); err != nil {
-			return 0, err
+			return err
 		}
 		if err := w.WriteByte(byte(csid & 0xFF)); err != nil {
-			return 1, err
+			return err
 		}
-		if err := w.WriteByte(byte((csid >> 8) & 0xFF)); err != nil {
-			return 2, err
-		}
-		return 3, nil
+		return w.WriteByte(byte((csid >> 8) & 0xFF))
 	}
 }
 

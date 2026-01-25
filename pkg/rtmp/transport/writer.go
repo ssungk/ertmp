@@ -78,7 +78,7 @@ func (w *Writer) WriteMessage(msg Message) error {
 		if isFirstChunk {
 			// 기본 헤더 작성
 			basicHeader := newBasicHeader(fmtType, csid)
-			if _, err := basicHeader.WriteTo(w.conn); err != nil {
+			if err := writeBasicHeader(w.conn, basicHeader); err != nil {
 				return fmt.Errorf("chunk basic header: %w: %w", ErrRtmpWrite, err)
 			}
 
@@ -91,7 +91,7 @@ func (w *Writer) WriteMessage(msg Message) error {
 		} else {
 			// 연속 청크 (FmtType3)
 			basicHeader := newBasicHeader(FmtType3, csid)
-			if _, err := basicHeader.WriteTo(w.conn); err != nil {
+			if err := writeBasicHeader(w.conn, basicHeader); err != nil {
 				return fmt.Errorf("chunk continuation header: %w: %w", ErrRtmpWrite, err)
 			}
 
