@@ -24,18 +24,6 @@ func NewMessageHeader(streamID, timestamp uint32, typeID uint8) MessageHeader {
 	}
 }
 
-// WriteTo writes the message header to writer based on format type
-// Uses stack buffer internally to avoid heap allocation
-func (h *MessageHeader) WriteTo(w io.Writer, fmtType uint8) (int64, error) {
-	var buf [15]byte
-	n := writeMessageHeaderToBuffer(buf[:], *h, fmtType)
-	if n == 0 {
-		return 0, nil
-	}
-	written, err := w.Write(buf[:n])
-	return int64(written), err
-}
-
 // writeMessageHeaderToBuffer writes message header to buffer (zero heap allocation)
 // Returns number of bytes written
 func writeMessageHeaderToBuffer(buf []byte, h MessageHeader, fmtType uint8) int {
