@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/ssungk/ertmp/pkg/amf"
+	"github.com/ssungk/ertmp/pkg/rtmp/amf"
 	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
