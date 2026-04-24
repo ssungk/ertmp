@@ -1,5 +1,7 @@
 # E-RTMP
 
+[![codecov](https://codecov.io/github/ssungk/ertmp/graph/badge.svg?token=A8UL5H53H5)](https://codecov.io/github/ssungk/ertmp)
+
 A Go library implementation of the Real-Time Messaging Protocol (RTMP) with plans for Enhanced RTMP support.
 
 ## Status
