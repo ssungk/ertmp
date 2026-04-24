@@ -1,0 +1,39 @@
+name: Integration Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Build server
+        run: go build -o rtmp-server ./cmd/server/
+
+      - name: Start server
+        run: ./rtmp-server &
+
+      - name: Wait for server to start
+        run: sleep 2
+
+      - name: Stream with ffmpeg
+        run: |
+          ffmpeg -re \
+            -f lavfi -i "testsrc=size=320x240:rate=15" \
+            -f lavfi -i "sine=frequency=440" \
+            -vcodec libx264 -preset ultrafast -tune zerolatency \
+            -acodec aac \
+            -f flv -t 5 rtmp://localhost:1935/live/test
