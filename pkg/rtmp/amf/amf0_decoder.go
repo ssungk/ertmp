@@ -10,8 +10,12 @@ import (
 	"time"
 )
 
+// decoderBufSize is the largest fixed-size field in AMF0 (float64 / date millis = 8 bytes).
+const decoderBufSize = 8
+
 type AMF0Decoder struct {
-	r bytes.Reader
+	r   bytes.Reader
+	buf [decoderBufSize]byte
 }
 
 func NewAMF0Decoder() *AMF0Decoder {
@@ -74,11 +78,10 @@ func (d *AMF0Decoder) decodeAMF0() (any, error) {
 }
 
 func (d *AMF0Decoder) decodeNumber() (float64, error) {
-	var b [8]byte
-	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
+	if _, err := io.ReadFull(&d.r, d.buf[:8]); err != nil {
 		return 0, err
 	}
-	return math.Float64frombits(binary.BigEndian.Uint64(b[:])), nil
+	return math.Float64frombits(binary.BigEndian.Uint64(d.buf[:8])), nil
 }
 
 func (d *AMF0Decoder) decodeBoolean() (bool, error) {
@@ -90,11 +93,11 @@ func (d *AMF0Decoder) decodeBoolean() (bool, error) {
 }
 
 func (d *AMF0Decoder) decodeString() (string, error) {
-	var b [2]byte
-	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
+	if _, err := io.ReadFull(&d.r, d.buf[:2]); err != nil {
 		return "", err
 	}
-	buf := make([]byte, binary.BigEndian.Uint16(b[:]))
+	length := int(binary.BigEndian.Uint16(d.buf[:2]))
+	buf := make([]byte, length)
 	if _, err := io.ReadFull(&d.r, buf); err != nil {
 		return "", err
 	}
@@ -102,25 +105,22 @@ func (d *AMF0Decoder) decodeString() (string, error) {
 }
 
 func (d *AMF0Decoder) decodeLongString() (string, error) {
-	var b [4]byte
-	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
+	if _, err := io.ReadFull(&d.r, d.buf[:4]); err != nil {
 		return "", err
 	}
-	length := binary.BigEndian.Uint32(b[:])
+	length := binary.BigEndian.Uint32(d.buf[:4])
 	if int64(length) > int64(d.r.Len()) {
 		return "", fmt.Errorf("long string length %d exceeds remaining data %d", length, d.r.Len())
 	}
 	buf := make([]byte, length)
-	// length <= d.r.Len() is guaranteed above, so io.ReadFull on bytes.Reader cannot fail.
-	// Error return is intentionally omitted: adding "if err != nil" would create an
-	// unreachable branch that breaks 100% statement coverage.
-	_, _ = io.ReadFull(&d.r, buf)
+	if _, err := io.ReadFull(&d.r, buf); err != nil {
+		return "", err
+	}
 	return string(buf), nil
 }
 
 func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
-	var b [4]byte
-	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
+	if _, err := io.ReadFull(&d.r, d.buf[:4]); err != nil {
 		return nil, err
 	}
 	// AMF0 spec §2.10: associative-count is approximate; parsing ends at the object-end marker
@@ -128,7 +128,7 @@ func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
 	if err != nil {
 		return nil, err
 	}
-	return m, nil
+	return ECMAArray(m), nil
 }
 
 func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
@@ -160,37 +160,31 @@ func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
 }
 
 func (d *AMF0Decoder) decodeStrictArray() ([]any, error) {
-	var b [4]byte
-	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
+	if _, err := io.ReadFull(&d.r, d.buf[:4]); err != nil {
 		return nil, err
 	}
-	count := binary.BigEndian.Uint32(b[:])
-	if int64(count) > int64(d.r.Len()) {
-		return nil, fmt.Errorf("strict array count %d exceeds remaining data %d", count, d.r.Len())
-	}
-	arr := make([]any, count)
+	count := binary.BigEndian.Uint32(d.buf[:4])
+	arr := make([]any, 0, min(int(count), d.r.Len())) // cap by remaining bytes to prevent OOM on malformed count
 	for i := uint32(0); i < count; i++ {
 		v, err := d.decodeAMF0()
 		if err != nil {
 			return nil, err
 		}
-		arr[i] = v
+		arr = append(arr, v)
 	}
 	return arr, nil
 }
 
 func (d *AMF0Decoder) decodeDate() (time.Time, error) {
-	var b [8]byte
-	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
+	if _, err := io.ReadFull(&d.r, d.buf[:8]); err != nil {
 		return time.Time{}, err
 	}
-	millis := math.Float64frombits(binary.BigEndian.Uint64(b[:]))
+	millis := math.Float64frombits(binary.BigEndian.Uint64(d.buf[:8]))
 
-	var offset [2]byte
-	if _, err := io.ReadFull(&d.r, offset[:]); err != nil {
+	if _, err := io.ReadFull(&d.r, d.buf[:2]); err != nil {
 		return time.Time{}, err
 	}
-	_ = offset // AMF0 spec §2.13: timezone offset is deprecated and always 0; UTC is assumed
+	// AMF0 spec §2.13: timezone offset is deprecated and always 0; UTC is assumed
 
 	return time.UnixMilli(int64(millis)).UTC(), nil
 }
