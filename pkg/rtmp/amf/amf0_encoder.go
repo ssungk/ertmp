@@ -108,31 +108,22 @@ func (e *AMF0Encoder) encodeECMAArray(arr ECMAArray) error {
 	b[0] = ecmaArrayMarker
 	binary.BigEndian.PutUint32(b[1:], uint32(len(arr)))
 	e.buf.Write(b[:])
-	keys := make([]string, 0, len(arr))
-	for k := range arr {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys) // deterministic output: map iteration order is random in Go
-	for _, key := range keys {
-		if err := e.encodeObjectProperty(key, arr[key]); err != nil {
-			return err
-		}
-	}
-	e.buf.WriteByte(0x00)
-	e.buf.WriteByte(0x00)
-	e.buf.WriteByte(objectEndMarker)
-	return nil
+	return e.encodeProperties(map[string]any(arr))
 }
 
 func (e *AMF0Encoder) encodeObject(obj map[string]any) error {
 	e.buf.WriteByte(objectMarker)
-	keys := make([]string, 0, len(obj))
-	for k := range obj {
+	return e.encodeProperties(obj)
+}
+
+func (e *AMF0Encoder) encodeProperties(m map[string]any) error {
+	keys := make([]string, 0, len(m))
+	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys) // deterministic output: map iteration order is random in Go
 	for _, key := range keys {
-		if err := e.encodeObjectProperty(key, obj[key]); err != nil {
+		if err := e.encodeObjectProperty(key, m[key]); err != nil {
 			return err
 		}
 	}

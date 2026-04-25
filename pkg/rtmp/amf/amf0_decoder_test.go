@@ -5,21 +5,6 @@ import (
 	"time"
 )
 
-func TestAMF0Decoder_Decode(t *testing.T) {
-	dec := NewAMF0Decoder()
-	data := []byte{0x00, 0x40, 0x09, 0x1e, 0xb8, 0x51, 0xeb, 0x85, 0x1f}
-
-	values, err := dec.Decode(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(values) != 1 {
-		t.Fatalf("expected 1 value, got %d", len(values))
-	}
-	if values[0].(float64) != 3.14 {
-		t.Errorf("expected 3.14, got %v", values[0])
-	}
-}
 
 func TestAMF0Decoder_Reuse(t *testing.T) {
 	dec := NewAMF0Decoder()

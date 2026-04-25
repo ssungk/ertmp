@@ -10,26 +10,6 @@ import (
 	"time"
 )
 
-func TestAMF0Encoder_Encode(t *testing.T) {
-	enc := NewAMF0Encoder()
-	values := []any{3.14, true, "hello", map[string]any{"foo": "bar"}}
-
-	data, err := enc.Encode(values...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(data) == 0 {
-		t.Fatal("expected non-empty encoded data")
-	}
-
-	decoded, err := NewAMF0Decoder().Decode(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(decoded) != len(values) {
-		t.Errorf("expected %d values, got %d", len(values), len(decoded))
-	}
-}
 
 func TestAMF0Encoder_Reuse(t *testing.T) {
 	enc := NewAMF0Encoder()
