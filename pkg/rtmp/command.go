@@ -1,10 +1,8 @@
 package rtmp
 
 import (
-	"bytes"
 	"fmt"
 
-	"github.com/ssungk/ertmp/pkg/rtmp/amf"
 	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
@@ -42,13 +40,12 @@ type PlayCommand struct {
 }
 
 // DecodeCommand decodes AMF0 command from message data
-func DecodeCommand(data []byte) (*Command, error) {
+func (c *Conn) DecodeCommand(data []byte) (*Command, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty command data")
 	}
 
-	reader := bytes.NewReader(data)
-	values, err := amf.DecodeAMF0Sequence(reader)
+	values, err := c.amfDec.Decode(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode AMF0: %w", err)
 	}
@@ -89,7 +86,7 @@ func DecodeCommand(data []byte) (*Command, error) {
 }
 
 // EncodeCommand encodes a command to AMF0 bytes
-func EncodeCommand(name string, txID float64, obj map[string]interface{}, args ...interface{}) ([]byte, error) {
+func (c *Conn) EncodeCommand(name string, txID float64, obj map[string]interface{}, args ...interface{}) ([]byte, error) {
 	values := []interface{}{name, txID}
 	if obj != nil {
 		values = append(values, obj)
@@ -98,7 +95,7 @@ func EncodeCommand(name string, txID float64, obj map[string]interface{}, args .
 	}
 	values = append(values, args...)
 
-	data, err := amf.EncodeAMF0Sequence(values...)
+	data, err := c.amfEnc.Encode(values...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode command: %w", err)
 	}
@@ -204,7 +201,7 @@ func ParsePlay(cmd *Command) (*PlayCommand, error) {
 }
 
 // NewConnectResponseMessage creates a connect response message
-func NewConnectResponseMessage(txID float64, props map[string]interface{}) transport.Message {
+func (c *Conn) NewConnectResponseMessage(txID float64, props map[string]interface{}) transport.Message {
 	if props == nil {
 		props = make(map[string]interface{})
 	}
@@ -215,29 +212,29 @@ func NewConnectResponseMessage(txID float64, props map[string]interface{}) trans
 		"description": "Connection succeeded",
 	}
 
-	cmdData, _ := EncodeCommand("_result", txID, props, info)
+	cmdData, _ := c.EncodeCommand("_result", txID, props, info)
 	buffer := buf.New(cmdData)
 	header := transport.NewMessageHeader(0, 0, transport.MsgTypeAMF0Command)
 	return transport.NewMessage(header, buffer)
 }
 
 // NewCreateStreamResponseMessage creates a createStream response message
-func NewCreateStreamResponseMessage(txID float64, streamID float64) transport.Message {
-	cmdData, _ := EncodeCommand("_result", txID, nil, streamID)
+func (c *Conn) NewCreateStreamResponseMessage(txID float64, streamID float64) transport.Message {
+	cmdData, _ := c.EncodeCommand("_result", txID, nil, streamID)
 	buffer := buf.New(cmdData)
 	header := transport.NewMessageHeader(0, 0, transport.MsgTypeAMF0Command)
 	return transport.NewMessage(header, buffer)
 }
 
 // NewOnStatusMessage creates an onStatus command message
-func NewOnStatusMessage(streamID uint32, level, code, description string) transport.Message {
+func (c *Conn) NewOnStatusMessage(streamID uint32, level, code, description string) transport.Message {
 	info := map[string]interface{}{
 		"level":       level,
 		"code":        code,
 		"description": description,
 	}
 
-	cmdData, _ := EncodeCommand("onStatus", 0, nil, info)
+	cmdData, _ := c.EncodeCommand("onStatus", 0, nil, info)
 	buffer := buf.New(cmdData)
 	header := transport.NewMessageHeader(streamID, 0, transport.MsgTypeAMF0Command)
 	return transport.NewMessage(header, buffer)

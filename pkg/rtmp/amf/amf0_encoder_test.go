@@ -8,37 +8,54 @@ import (
 	"time"
 )
 
-func TestEncodeAMF0Sequence_Success(t *testing.T) {
+func TestAMF0Encoder_Encode(t *testing.T) {
+	enc := NewAMF0Encoder()
 	values := []any{3.14, true, "hello", map[string]any{"foo": "bar"}}
-	data, err := EncodeAMF0Sequence(values...)
+
+	data, err := enc.Encode(values...)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if len(data) == 0 {
 		t.Fatal("expected non-empty encoded data")
 	}
 
-	decoded, err := DecodeAMF0Sequence(bytes.NewReader(data))
+	decoded, err := NewAMF0Decoder().Decode(data)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if len(decoded) != len(values) {
 		t.Errorf("expected %d values, got %d", len(values), len(decoded))
 	}
 }
 
-func TestEncodeAMF0Sequence_Error(t *testing.T) {
+func TestAMF0Encoder_Reuse(t *testing.T) {
+	enc := NewAMF0Encoder()
+
+	first, err := enc.Encode(3.14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := enc.Encode("hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(first, second) {
+		t.Error("reuse should produce different results")
+	}
+}
+
+func TestAMF0Encoder_Error(t *testing.T) {
+	enc := NewAMF0Encoder()
 	type unsupportedType struct{}
-	_, err := EncodeAMF0Sequence(unsupportedType{})
+	_, err := enc.Encode(unsupportedType{})
 	if err == nil {
 		t.Fatal("expected error for unsupported type")
 	}
 }
 
 func TestEncodeAMF0_Number(t *testing.T) {
-	data, err := EncodeAMF0Sequence(3.14)
+	data, err := NewAMF0Encoder().Encode(3.14)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,77 +67,79 @@ func TestEncodeAMF0_Number(t *testing.T) {
 }
 
 func TestEncodeValue_Float32(t *testing.T) {
-	buf := new(bytes.Buffer)
-	if err := encodeValue(buf, float32(3.14)); err != nil {
+	data, err := NewAMF0Encoder().Encode(float32(3.14))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if buf.Bytes()[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", buf.Bytes()[0])
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
 	}
 }
 
 func TestEncodeValue_Int(t *testing.T) {
-	buf := new(bytes.Buffer)
-	if err := encodeValue(buf, int(42)); err != nil {
+	data, err := NewAMF0Encoder().Encode(int(42))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if buf.Bytes()[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", buf.Bytes()[0])
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
 	}
 }
 
 func TestEncodeValue_Int32(t *testing.T) {
-	buf := new(bytes.Buffer)
-	if err := encodeValue(buf, int32(42)); err != nil {
+	data, err := NewAMF0Encoder().Encode(int32(42))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if buf.Bytes()[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", buf.Bytes()[0])
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
 	}
 }
 
 func TestEncodeValue_Int64(t *testing.T) {
-	buf := new(bytes.Buffer)
-	if err := encodeValue(buf, int64(42)); err != nil {
+	data, err := NewAMF0Encoder().Encode(int64(42))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if buf.Bytes()[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", buf.Bytes()[0])
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
 	}
 }
 
 func TestEncodeValue_Uint(t *testing.T) {
-	buf := new(bytes.Buffer)
-	if err := encodeValue(buf, uint(42)); err != nil {
+	data, err := NewAMF0Encoder().Encode(uint(42))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if buf.Bytes()[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", buf.Bytes()[0])
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
 	}
 }
 
 func TestEncodeValue_Uint32(t *testing.T) {
-	buf := new(bytes.Buffer)
-	if err := encodeValue(buf, uint32(42)); err != nil {
+	data, err := NewAMF0Encoder().Encode(uint32(42))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if buf.Bytes()[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", buf.Bytes()[0])
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
 	}
 }
 
 func TestEncodeValue_Uint64(t *testing.T) {
-	buf := new(bytes.Buffer)
-	if err := encodeValue(buf, uint64(42)); err != nil {
+	data, err := NewAMF0Encoder().Encode(uint64(42))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if buf.Bytes()[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", buf.Bytes()[0])
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
 	}
 }
 
 func TestEncodeAMF0_Boolean(t *testing.T) {
-	data, err := EncodeAMF0Sequence(true)
+	enc := NewAMF0Encoder()
+
+	data, err := enc.Encode(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +147,7 @@ func TestEncodeAMF0_Boolean(t *testing.T) {
 		t.Errorf("expected [0x01 0x01] for true, got %v", data)
 	}
 
-	data, err = EncodeAMF0Sequence(false)
+	data, err = enc.Encode(false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +157,7 @@ func TestEncodeAMF0_Boolean(t *testing.T) {
 }
 
 func TestEncodeAMF0_String(t *testing.T) {
-	data, err := EncodeAMF0Sequence("hello")
+	data, err := NewAMF0Encoder().Encode("hello")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +169,7 @@ func TestEncodeAMF0_String(t *testing.T) {
 }
 
 func TestEncodeAMF0_String_Empty(t *testing.T) {
-	data, err := EncodeAMF0Sequence("")
+	data, err := NewAMF0Encoder().Encode("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +182,7 @@ func TestEncodeAMF0_String_Empty(t *testing.T) {
 
 func TestEncodeAMF0_LongString(t *testing.T) {
 	longStr := strings.Repeat("a", 70000)
-	data, err := EncodeAMF0Sequence(longStr)
+	data, err := NewAMF0Encoder().Encode(longStr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +197,7 @@ func TestEncodeAMF0_LongString(t *testing.T) {
 
 func TestEncodeAMF0_Object(t *testing.T) {
 	obj := map[string]any{"foo": "bar"}
-	data, err := EncodeAMF0Sequence(obj)
+	data, err := NewAMF0Encoder().Encode(obj)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,14 +215,14 @@ func TestEncodeAMF0_Object(t *testing.T) {
 
 func TestEncodeAMF0_Object_UnsupportedValue(t *testing.T) {
 	type unsupportedType struct{}
-	_, err := EncodeAMF0Sequence(map[string]any{"key": unsupportedType{}})
+	_, err := NewAMF0Encoder().Encode(map[string]any{"key": unsupportedType{}})
 	if err == nil {
 		t.Fatal("expected error for unsupported value in object")
 	}
 }
 
 func TestEncodeAMF0_Object_Empty(t *testing.T) {
-	data, err := EncodeAMF0Sequence(map[string]any{})
+	data, err := NewAMF0Encoder().Encode(map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,8 +234,7 @@ func TestEncodeAMF0_Object_Empty(t *testing.T) {
 }
 
 func TestEncodeObjectProperty_KeyTooLong(t *testing.T) {
-	buf := new(bytes.Buffer)
-	err := encodeObjectProperty(buf, strings.Repeat("a", 70000), "value")
+	_, err := NewAMF0Encoder().Encode(map[string]any{strings.Repeat("a", 70000): "value"})
 	if err == nil {
 		t.Fatal("expected error for key too long")
 	}
@@ -226,9 +244,8 @@ func TestEncodeObjectProperty_KeyTooLong(t *testing.T) {
 }
 
 func TestEncodeObjectProperty_ValueError(t *testing.T) {
-	buf := new(bytes.Buffer)
 	type unsupportedType struct{}
-	err := encodeObjectProperty(buf, "key", unsupportedType{})
+	_, err := NewAMF0Encoder().Encode(map[string]any{"key": unsupportedType{}})
 	if err == nil {
 		t.Fatal("expected value encode error")
 	}
@@ -238,7 +255,7 @@ func TestEncodeObjectProperty_ValueError(t *testing.T) {
 }
 
 func TestEncodeAMF0_Null(t *testing.T) {
-	data, err := EncodeAMF0Sequence(nil)
+	data, err := NewAMF0Encoder().Encode(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +266,7 @@ func TestEncodeAMF0_Null(t *testing.T) {
 }
 
 func TestEncodeAMF0_StrictArray(t *testing.T) {
-	data, err := EncodeAMF0Sequence([]any{"a", "b"})
+	data, err := NewAMF0Encoder().Encode([]any{"a", "b"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +283,7 @@ func TestEncodeAMF0_StrictArray(t *testing.T) {
 }
 
 func TestEncodeAMF0_StrictArray_Empty(t *testing.T) {
-	data, err := EncodeAMF0Sequence([]any{})
+	data, err := NewAMF0Encoder().Encode([]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +296,7 @@ func TestEncodeAMF0_StrictArray_Empty(t *testing.T) {
 
 func TestEncodeAMF0_StrictArray_UnsupportedElement(t *testing.T) {
 	type unsupportedType struct{}
-	_, err := EncodeAMF0Sequence([]any{unsupportedType{}})
+	_, err := NewAMF0Encoder().Encode([]any{unsupportedType{}})
 	if err == nil {
 		t.Fatal("expected error for unsupported element type")
 	}
@@ -287,7 +304,7 @@ func TestEncodeAMF0_StrictArray_UnsupportedElement(t *testing.T) {
 
 func TestEncodeAMF0_Date(t *testing.T) {
 	date := time.Date(2023, 3, 28, 19, 40, 0, 123*1e6, time.UTC)
-	data, err := EncodeAMF0Sequence(date)
+	data, err := NewAMF0Encoder().Encode(date)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +319,7 @@ func TestEncodeAMF0_Date(t *testing.T) {
 
 func TestEncodeAMF0_UnsupportedType(t *testing.T) {
 	type customType struct{ field string }
-	_, err := EncodeAMF0Sequence(customType{field: "test"})
+	_, err := NewAMF0Encoder().Encode(customType{field: "test"})
 	if err == nil {
 		t.Fatal("expected error for unsupported type")
 	}
@@ -312,6 +329,9 @@ func TestEncodeAMF0_UnsupportedType(t *testing.T) {
 }
 
 func TestEncodeAMF0_RoundTrip(t *testing.T) {
+	enc := NewAMF0Encoder()
+	dec := NewAMF0Decoder()
+
 	testCases := []any{
 		3.14,
 		true,
@@ -328,12 +348,12 @@ func TestEncodeAMF0_RoundTrip(t *testing.T) {
 
 	for i, original := range testCases {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
-			encoded, err := EncodeAMF0Sequence(original)
+			encoded, err := enc.Encode(original)
 			if err != nil {
 				t.Fatalf("encoding failed: %v", err)
 			}
 
-			decoded, err := DecodeAMF0Sequence(bytes.NewReader(encoded))
+			decoded, err := dec.Decode(encoded)
 			if err != nil {
 				t.Fatalf("decoding failed: %v", err)
 			}
@@ -369,18 +389,23 @@ func TestEncodeAMF0_RoundTrip(t *testing.T) {
 }
 
 func BenchmarkEncodeAMF0_Number(b *testing.B) {
+	enc := NewAMF0Encoder()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = EncodeAMF0Sequence(3.14)
+		_, _ = enc.Encode(3.14)
 	}
 }
 
 func BenchmarkEncodeAMF0_String(b *testing.B) {
+	enc := NewAMF0Encoder()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = EncodeAMF0Sequence("hello world")
+		_, _ = enc.Encode("hello world")
 	}
 }
 
 func BenchmarkEncodeAMF0_Object(b *testing.B) {
+	enc := NewAMF0Encoder()
 	obj := map[string]any{
 		"name":  "test",
 		"value": 123.45,
@@ -388,6 +413,6 @@ func BenchmarkEncodeAMF0_Object(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = EncodeAMF0Sequence(obj)
+		_, _ = enc.Encode(obj)
 	}
 }

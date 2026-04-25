@@ -85,7 +85,7 @@ func (s *Session) handleMessage(msg transport.Message) error {
 
 // handleCommand handles AMF command messages
 func (s *Session) handleCommand(msg transport.Message) error {
-	cmd, err := rtmp.DecodeCommand(msg.Data())
+	cmd, err := s.conn.DecodeCommand(msg.Data())
 	if err != nil {
 		slog.Warn("Failed to decode command", "error", err)
 		return nil

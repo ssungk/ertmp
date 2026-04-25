@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/ssungk/ertmp/pkg/rtmp/amf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
 
@@ -11,6 +12,9 @@ import (
 type Conn struct {
 	transport *transport.Transport
 	config    Config
+
+	amfDec *amf.AMF0Decoder
+	amfEnc *amf.AMF0Encoder
 
 	// 스트림 관리
 	streams      map[uint32]*Stream
@@ -40,6 +44,8 @@ func newConn(netConn net.Conn) *Conn {
 	return &Conn{
 		transport:    transport.NewTransport(netConn),
 		config:       DefaultConfig(),
+		amfDec:       amf.NewAMF0Decoder(),
+		amfEnc:       amf.NewAMF0Encoder(),
 		streams:      make(map[uint32]*Stream),
 		nextStreamID: 1,
 	}

@@ -1,6 +1,7 @@
 package amf
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -9,49 +10,54 @@ import (
 	"time"
 )
 
-func DecodeAMF0Sequence(r io.Reader) ([]any, error) {
-	values := make([]any, 0, 5)
-
-	for {
-		val, err := DecodeAMF0(r)
-		switch {
-		case err == nil:
-			values = append(values, val)
-		case errors.Is(err, io.EOF):
-			return values, nil
-		default:
-			return nil, fmt.Errorf("AMF0 decode failed: %w", err)
-		}
-	}
+type AMF0Decoder struct {
+	r bytes.Reader
 }
 
-func DecodeAMF0(r io.Reader) (any, error) {
-	marker := make([]byte, 1)
-	if _, err := io.ReadFull(r, marker); err != nil {
+func NewAMF0Decoder() *AMF0Decoder {
+	return &AMF0Decoder{}
+}
+
+func (d *AMF0Decoder) Decode(data []byte) ([]any, error) {
+	d.r.Reset(data)
+	values := make([]any, 0, 5)
+	for d.r.Len() > 0 {
+		val, err := d.decodeAMF0()
+		if err != nil {
+			return nil, fmt.Errorf("AMF0 decode failed: %w", err)
+		}
+		values = append(values, val)
+	}
+	return values, nil
+}
+
+func (d *AMF0Decoder) decodeAMF0() (any, error) {
+	marker, err := d.r.ReadByte()
+	if err != nil {
 		return nil, err
 	}
 
-	switch marker[0] {
+	switch marker {
 	case numberMarker:
-		return decodeNumber(r)
+		return d.decodeNumber()
 	case booleanMarker:
-		return decodeBoolean(r)
+		return d.decodeBoolean()
 	case stringMarker:
-		return decodeString(r)
+		return d.decodeString()
 	case objectMarker:
-		return decodeObject(r)
+		return d.decodeObject()
 	case nullMarker, undefinedMarker:
-		return decodeNull(r)
+		return nil, nil
 	case referenceMarker:
 		return nil, fmt.Errorf("AMF0 reference not implemented")
 	case ecmaArrayMarker:
-		return decodeECMAArray(r)
+		return d.decodeECMAArray()
 	case strictArrayMarker:
-		return decodeStrictArray(r)
+		return d.decodeStrictArray()
 	case dateMarker:
-		return decodeDate(r)
+		return d.decodeDate()
 	case longStringMarker:
-		return decodeLongString(r)
+		return d.decodeLongString()
 	case unsupportedMarker:
 		return nil, fmt.Errorf("AMF0 unsupported not implemented")
 	case xmlDocumentMarker:
@@ -61,79 +67,75 @@ func DecodeAMF0(r io.Reader) (any, error) {
 	case avmPlusMarker:
 		return nil, fmt.Errorf("AMF0 AMF3 switch not implemented")
 	default:
-		return nil, fmt.Errorf("unknown AMF0 marker: 0x%x", marker[0])
+		return nil, fmt.Errorf("unknown AMF0 marker: 0x%x", marker)
 	}
 }
 
-func decodeNumber(r io.Reader) (float64, error) {
+func (d *AMF0Decoder) decodeNumber() (float64, error) {
 	var num float64
-	err := binary.Read(r, binary.BigEndian, &num)
+	err := binary.Read(&d.r, binary.BigEndian, &num)
 	return num, err
 }
 
-func decodeBoolean(r io.Reader) (bool, error) {
-	b := make([]byte, 1)
-	if _, err := io.ReadFull(r, b); err != nil {
+func (d *AMF0Decoder) decodeBoolean() (bool, error) {
+	b, err := d.r.ReadByte()
+	if err != nil {
 		return false, err
 	}
-	return b[0] != 0, nil
+	return b != 0, nil
 }
 
-func decodeString(r io.Reader) (string, error) {
+func (d *AMF0Decoder) decodeString() (string, error) {
 	var length uint16
-	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
+	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
 		return "", err
 	}
 	buf := make([]byte, length)
-	if _, err := io.ReadFull(r, buf); err != nil {
+	if _, err := io.ReadFull(&d.r, buf); err != nil {
 		return "", err
 	}
 	return string(buf), nil
 }
 
-func decodeLongString(r io.Reader) (string, error) {
+func (d *AMF0Decoder) decodeLongString() (string, error) {
 	var length uint32
-	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
+	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
 		return "", err
 	}
 	buf := make([]byte, length)
-	if _, err := io.ReadFull(r, buf); err != nil {
+	if _, err := io.ReadFull(&d.r, buf); err != nil {
 		return "", err
 	}
 	return string(buf), nil
 }
 
-func decodeNull(_ io.Reader) (any, error) {
-	return nil, nil
-}
-
-func decodeECMAArray(r io.Reader) (map[string]any, error) {
+func (d *AMF0Decoder) decodeECMAArray() (map[string]any, error) {
 	var length uint32
-	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
+	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
 		return nil, err
 	}
-	return decodeObject(r)
+	return d.decodeObject()
 }
 
-func decodeObject(r io.Reader) (map[string]any, error) {
+func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
 	obj := make(map[string]any)
-	end := make([]byte, 1)
 
 	for {
-		key, err := decodeString(r)
+		key, err := d.decodeString()
 		if err != nil {
 			return nil, err
 		}
 		if len(key) == 0 {
-			if _, err := io.ReadFull(r, end); err != nil {
+			b, err := d.r.ReadByte()
+			if err != nil {
 				return nil, err
 			}
-			if end[0] == objectEndMarker {
+			if b == objectEndMarker {
 				break
 			}
 			return nil, errors.New("expected object end marker")
 		}
-		val, err := DecodeAMF0(r)
+		val, err := d.decodeAMF0()
 		if err != nil {
 			return nil, err
 		}
@@ -142,14 +144,14 @@ func decodeObject(r io.Reader) (map[string]any, error) {
 	return obj, nil
 }
 
-func decodeStrictArray(r io.Reader) ([]any, error) {
+func (d *AMF0Decoder) decodeStrictArray() ([]any, error) {
 	var count uint32
-	if err := binary.Read(r, binary.BigEndian, &count); err != nil {
+	if err := binary.Read(&d.r, binary.BigEndian, &count); err != nil {
 		return nil, err
 	}
 	arr := make([]any, count)
 	for i := uint32(0); i < count; i++ {
-		v, err := DecodeAMF0(r)
+		v, err := d.decodeAMF0()
 		if err != nil {
 			return nil, err
 		}
@@ -158,14 +160,14 @@ func decodeStrictArray(r io.Reader) ([]any, error) {
 	return arr, nil
 }
 
-func decodeDate(r io.Reader) (time.Time, error) {
+func (d *AMF0Decoder) decodeDate() (time.Time, error) {
 	var millis float64
-	if err := binary.Read(r, binary.BigEndian, &millis); err != nil {
+	if err := binary.Read(&d.r, binary.BigEndian, &millis); err != nil {
 		return time.Time{}, err
 	}
 
-	offset := make([]byte, 2)
-	if _, err := io.ReadFull(r, offset); err != nil {
+	var offset [2]byte
+	if _, err := io.ReadFull(&d.r, offset[:]); err != nil {
 		return time.Time{}, err
 	}
 
