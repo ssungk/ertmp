@@ -469,6 +469,9 @@ func TestDecodeAMF0_LongString_OversizedLength(t *testing.T) {
 func TestDecodeAMF0_LongString_CustomMaxLen(t *testing.T) {
 	d := NewAMF0Decoder()
 	d.SetMaxLongStringLen(4)
+	if d.MaxLongStringLen() != 4 {
+		t.Fatalf("expected MaxLongStringLen=4, got %d", d.MaxLongStringLen())
+	}
 	// length=5, exceeds custom max of 4
 	_, err := d.Decode([]byte{0x0c, 0x00, 0x00, 0x00, 0x05, 'h', 'e', 'l', 'l', 'o'})
 	if err == nil {
