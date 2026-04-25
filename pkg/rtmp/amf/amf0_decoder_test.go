@@ -178,6 +178,18 @@ func TestDecodeAMF0_Object(t *testing.T) {
 	}
 }
 
+func TestDecodeAMF0_Object_Empty(t *testing.T) {
+	data := []byte{0x03, 0x00, 0x00, 0x09}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj, ok := vals[0].(map[string]any)
+	if !ok || len(obj) != 0 {
+		t.Errorf("expected empty map, got %v", vals[0])
+	}
+}
+
 func TestDecodeAMF0_Object_MalformedShortKey(t *testing.T) {
 	_, err := NewAMF0Decoder().Decode([]byte{0x03, 0x00, 0x03, 'f', 'o'})
 	if err == nil {
@@ -380,6 +392,56 @@ func TestDecodeAMF0_Date_MalformedMissingOffset(t *testing.T) {
 	}
 }
 
+func TestDecodeAMF0_Date_NaN(t *testing.T) {
+	// NaN millis must be rejected; int64(NaN) silently produces 0 without this check
+	data := []byte{
+		0x0B,
+		0x7F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // quiet NaN
+		0x00, 0x00,
+	}
+	_, err := NewAMF0Decoder().Decode(data)
+	if err == nil {
+		t.Error("expected error for NaN millis")
+	}
+}
+
+func TestDecodeAMF0_Date_Inf(t *testing.T) {
+	// Inf millis must be rejected; int64(+Inf) silently produces MinInt64 without this check
+	data := []byte{
+		0x0B,
+		0x7F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // +Inf
+		0x00, 0x00,
+	}
+	_, err := NewAMF0Decoder().Decode(data)
+	if err == nil {
+		t.Error("expected error for Inf millis")
+	}
+}
+
+func TestDecodeAMF0_Date_NonZeroTimezone(t *testing.T) {
+	// AMF0 spec §2.13: timezone offset is deprecated and must be ignored
+	millis := 1_000.0
+	data := []byte{
+		0x0B,
+		0x40, 0x8F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, // 1000.0 ms
+		0x02, 0x1C, // KST +540 minutes (non-zero, must be ignored)
+	}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := vals[0].(time.Time)
+	if !ok {
+		t.Fatalf("expected time.Time, got %T", vals[0])
+	}
+	if got.Location() != time.UTC {
+		t.Errorf("expected UTC location, got %v", got.Location())
+	}
+	if got.UnixMilli() != int64(millis) {
+		t.Errorf("expected %v ms, got %v ms", int64(millis), got.UnixMilli())
+	}
+}
+
 func TestDecodeAMF0_LongString(t *testing.T) {
 	vals, err := NewAMF0Decoder().Decode([]byte{0x0c, 0x00, 0x00, 0x00, 0x05, 'h', 'e', 'l', 'l', 'o'})
 	if err != nil {
@@ -400,7 +462,17 @@ func TestDecodeAMF0_LongString_MalformedShortLength(t *testing.T) {
 func TestDecodeAMF0_LongString_OversizedLength(t *testing.T) {
 	_, err := NewAMF0Decoder().Decode([]byte{0x0c, 0xFF, 0xFF, 0xFF, 0xFF})
 	if err == nil {
-		t.Fatal("expected error for length exceeding remaining data")
+		t.Fatal("expected error for length exceeding max long string len")
+	}
+}
+
+func TestDecodeAMF0_LongString_CustomMaxLen(t *testing.T) {
+	d := NewAMF0Decoder()
+	d.SetMaxLongStringLen(4)
+	// length=5, exceeds custom max of 4
+	_, err := d.Decode([]byte{0x0c, 0x00, 0x00, 0x00, 0x05, 'h', 'e', 'l', 'l', 'o'})
+	if err == nil {
+		t.Fatal("expected error for length exceeding custom max")
 	}
 }
 

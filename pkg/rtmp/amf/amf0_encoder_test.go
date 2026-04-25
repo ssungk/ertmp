@@ -22,8 +22,15 @@ func TestAMF0Encoder_Reuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Equal(first, second) {
-		t.Error("reuse should produce different results")
+
+	wantFirst := []byte{0x00, 0x40, 0x09, 0x1E, 0xB8, 0x51, 0xEB, 0x85, 0x1F}
+	wantSecond := []byte{0x02, 0x00, 0x05, 'h', 'e', 'l', 'l', 'o'}
+
+	if !bytes.Equal(first, wantFirst) {
+		t.Errorf("first encode: got %v, want %v", first, wantFirst)
+	}
+	if !bytes.Equal(second, wantSecond) {
+		t.Errorf("second encode: got %v, want %v", second, wantSecond)
 	}
 }
 
@@ -313,6 +320,26 @@ func TestEncodeAMF0_Object_Empty(t *testing.T) {
 	expected := []byte{0x03, 0x00, 0x00, 0x09}
 	if !bytes.Equal(data, expected) {
 		t.Errorf("expected %v, got %v", expected, data)
+	}
+}
+
+func TestEncodeObjectProperty_EmptyKey(t *testing.T) {
+	_, err := NewAMF0Encoder().Encode(map[string]any{"": "value"})
+	if err == nil {
+		t.Fatal("expected error for empty key")
+	}
+	if !strings.Contains(err.Error(), "object key must not be empty") {
+		t.Errorf("expected 'object key must not be empty', got %v", err.Error())
+	}
+}
+
+func TestEncodeECMAArray_EmptyKey(t *testing.T) {
+	_, err := NewAMF0Encoder().Encode(ECMAArray{"": "value"})
+	if err == nil {
+		t.Fatal("expected error for empty key in ECMAArray")
+	}
+	if !strings.Contains(err.Error(), "object key must not be empty") {
+		t.Errorf("expected 'object key must not be empty', got %v", err.Error())
 	}
 }
 

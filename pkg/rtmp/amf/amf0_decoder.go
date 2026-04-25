@@ -13,13 +13,24 @@ import (
 // decoderBufSize is the largest fixed-size field in AMF0 (float64 / date millis = 8 bytes).
 const decoderBufSize = 8
 
+const defaultMaxLongStringLen uint32 = 64 * 1024 * 1024 // 64MB
+
 type AMF0Decoder struct {
-	r   bytes.Reader
-	buf [decoderBufSize]byte
+	r                bytes.Reader
+	buf              [decoderBufSize]byte // reused across reads to avoid heap escape via io.ReadFull's io.Reader interface chain
+	maxLongStringLen uint32
 }
 
 func NewAMF0Decoder() *AMF0Decoder {
-	return &AMF0Decoder{}
+	return &AMF0Decoder{maxLongStringLen: defaultMaxLongStringLen}
+}
+
+func (d *AMF0Decoder) MaxLongStringLen() uint32 {
+	return d.maxLongStringLen
+}
+
+func (d *AMF0Decoder) SetMaxLongStringLen(n uint32) {
+	d.maxLongStringLen = n
 }
 
 func (d *AMF0Decoder) Decode(data []byte) ([]any, error) {
@@ -40,7 +51,7 @@ func (d *AMF0Decoder) decodeAMF0() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	
 	switch marker {
 	case numberMarker:
 		return d.decodeNumber()
@@ -51,6 +62,7 @@ func (d *AMF0Decoder) decodeAMF0() (any, error) {
 	case objectMarker:
 		return d.decodeObject()
 	case nullMarker, undefinedMarker:
+		// undefined (0x06) is mapped to nil; callers cannot distinguish from null (0x05)
 		return nil, nil
 	case referenceMarker:
 		return nil, fmt.Errorf("AMF0 reference not implemented")
@@ -109,8 +121,8 @@ func (d *AMF0Decoder) decodeLongString() (string, error) {
 		return "", err
 	}
 	length := binary.BigEndian.Uint32(d.buf[:4])
-	if int64(length) > int64(d.r.Len()) {
-		return "", fmt.Errorf("long string length %d exceeds remaining data %d", length, d.r.Len())
+	if length > d.maxLongStringLen {
+		return "", fmt.Errorf("long string too large: %d bytes (max %d)", length, d.maxLongStringLen)
 	}
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(&d.r, buf); err != nil {
@@ -128,12 +140,12 @@ func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ECMAArray(m), nil
+	return m, nil
 }
 
 func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
 	obj := make(map[string]any)
-
+	
 	for {
 		key, err := d.decodeString()
 		if err != nil {
@@ -164,7 +176,7 @@ func (d *AMF0Decoder) decodeStrictArray() ([]any, error) {
 		return nil, err
 	}
 	count := binary.BigEndian.Uint32(d.buf[:4])
-	arr := make([]any, 0, min(int(count), d.r.Len())) // cap by remaining bytes to prevent OOM on malformed count
+	arr := make([]any, 0, min(int(count), d.r.Len())) // prevent large alloc on malformed count; loop exits early on decode error
 	for i := uint32(0); i < count; i++ {
 		v, err := d.decodeAMF0()
 		if err != nil {
@@ -180,11 +192,14 @@ func (d *AMF0Decoder) decodeDate() (time.Time, error) {
 		return time.Time{}, err
 	}
 	millis := math.Float64frombits(binary.BigEndian.Uint64(d.buf[:8]))
+	if math.IsNaN(millis) || math.IsInf(millis, 0) {
+		return time.Time{}, fmt.Errorf("AMF0 date: invalid millis %v", millis)
+	}
 
 	if _, err := io.ReadFull(&d.r, d.buf[:2]); err != nil {
 		return time.Time{}, err
 	}
 	// AMF0 spec §2.13: timezone offset is deprecated and always 0; UTC is assumed
-
+	
 	return time.UnixMilli(int64(millis)).UTC(), nil
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"sort"
 	"time"
 )
 
@@ -117,24 +116,20 @@ func (e *AMF0Encoder) encodeObject(obj map[string]any) error {
 }
 
 func (e *AMF0Encoder) encodeProperties(m map[string]any) error {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys) // deterministic output: map iteration order is random in Go
-	for _, key := range keys {
-		if err := e.encodeObjectProperty(key, m[key]); err != nil {
+	for key, val := range m {
+		if err := e.encodeObjectProperty(key, val); err != nil {
 			return err
 		}
 	}
-	e.buf.WriteByte(0x00)
-	e.buf.WriteByte(0x00)
-	e.buf.WriteByte(objectEndMarker)
+	e.buf.Write([]byte{0x00, 0x00, objectEndMarker})
 	return nil
 }
 
 func (e *AMF0Encoder) encodeObjectProperty(key string, val any) error {
 	keyByteLen := len(key)
+	if keyByteLen == 0 {
+		return fmt.Errorf("object key must not be empty")
+	}
 	if keyByteLen > 65535 {
 		return fmt.Errorf("object key too long: %d bytes (max 65535)", keyByteLen)
 	}
@@ -146,6 +141,7 @@ func (e *AMF0Encoder) encodeObjectProperty(key string, val any) error {
 }
 
 func (e *AMF0Encoder) encodeStrictArray(arr []any) error {
+	// uint32(len(arr)) never truncates silently: []any with 4B+ elements requires >64GB memory, which is unreachable in practice
 	var b [5]byte
 	b[0] = strictArrayMarker
 	binary.BigEndian.PutUint32(b[1:], uint32(len(arr)))
