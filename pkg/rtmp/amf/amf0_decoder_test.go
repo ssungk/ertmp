@@ -453,17 +453,44 @@ func TestDecodeAMF0_Date_NegInf(t *testing.T) {
 }
 
 func TestDecodeAMF0_Date_OverflowInt64(t *testing.T) {
-	// 1e30 is a finite float64 but exceeds MaxInt64; int64(1e30) wraps to MinInt64 without this check
-	overflow := math.Float64bits(1e30)
+	// float64(math.MaxInt64) rounds up to 2^63; millis = 2^63 passes "> MaxInt64" but overflows int64
+	// use >= float64(math.MaxInt64) to catch this boundary
+	boundary := math.Float64bits(float64(math.MaxInt64)) // = 2^63
 	data := []byte{
+		0x0B,
+		byte(boundary >> 56), byte(boundary >> 48), byte(boundary >> 40), byte(boundary >> 32),
+		byte(boundary >> 24), byte(boundary >> 16), byte(boundary >> 8), byte(boundary),
+		0x00, 0x00,
+	}
+	_, err := NewAMF0Decoder().Decode(data)
+	if err == nil {
+		t.Error("expected error for millis at int64 boundary (2^63)")
+	}
+
+	// also verify a clearly large value is rejected
+	overflow := math.Float64bits(1e30)
+	data = []byte{
 		0x0B,
 		byte(overflow >> 56), byte(overflow >> 48), byte(overflow >> 40), byte(overflow >> 32),
 		byte(overflow >> 24), byte(overflow >> 16), byte(overflow >> 8), byte(overflow),
 		0x00, 0x00,
 	}
-	_, err := NewAMF0Decoder().Decode(data)
+	_, err = NewAMF0Decoder().Decode(data)
 	if err == nil {
 		t.Error("expected error for millis out of int64 range")
+	}
+
+	// negative overflow: -1e30 is finite but below MinInt64
+	negOverflow := math.Float64bits(-1e30)
+	data = []byte{
+		0x0B,
+		byte(negOverflow >> 56), byte(negOverflow >> 48), byte(negOverflow >> 40), byte(negOverflow >> 32),
+		byte(negOverflow >> 24), byte(negOverflow >> 16), byte(negOverflow >> 8), byte(negOverflow),
+		0x00, 0x00,
+	}
+	_, err = NewAMF0Decoder().Decode(data)
+	if err == nil {
+		t.Error("expected error for negative millis out of int64 range")
 	}
 }
 

@@ -27,6 +27,16 @@
 
 ---
 
+### `encodeProperties` 종료 마커 slice literal 스타일 불일치
+
+**지적 내용**: `e.buf.Write([]byte{0x00, 0x00, objectEndMarker})`가 파일 내 다른 `var b [N]byte` 패턴과 스타일이 다르다.
+
+**결론**: 조치 불필요.
+
+**이유**: 3바이트 리터럴 수준에서 일관성 강제는 오버엔지니어링이다. 컴파일러가 최적화하므로 성능 차이도 없다. `var b [3]byte / b[2] = objectEndMarker`로 바꾸면 오히려 0x00 두 개가 암묵적으로 zero-init에 의존한다는 점이 숨겨져 가독성이 떨어진다.
+
+---
+
 ### 재귀 깊이 제한 없음
 
 **지적 내용**: `decodeAMF0` ↔ `decodeObject` / `decodeStrictArray`가 상호 재귀하며 깊이 제한이 없어 스택 오버플로우 가능.

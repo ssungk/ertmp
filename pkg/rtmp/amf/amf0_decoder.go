@@ -203,11 +203,11 @@ func (d *AMF0Decoder) decodeDate() (time.Time, error) {
 	if math.IsNaN(millis) || math.IsInf(millis, 0) {
 		return time.Time{}, fmt.Errorf("AMF0 date: invalid millis %v", millis)
 	}
-	if millis > math.MaxInt64 {
+	if millis >= float64(math.MaxInt64) || millis < float64(math.MinInt64) {
 		return time.Time{}, fmt.Errorf("AMF0 date: millis out of int64 range: %v", millis)
 	}
 
-	// AMF0 spec §2.13: timezone offset is deprecated and always 0; UTC is assumed
+	// AMF0 spec §2.13: timezone offset is deprecated; always ignored, UTC is used
 	if _, err := io.ReadFull(&d.r, d.buf[:2]); err != nil {
 		return time.Time{}, err
 	}
