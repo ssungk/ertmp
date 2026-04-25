@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"time"
 )
 
@@ -102,10 +101,12 @@ func (d *AMF0Decoder) decodeLongString() (string, error) {
 	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
 		return "", err
 	}
-	buf := make([]byte, length)
-	if _, err := io.ReadFull(&d.r, buf); err != nil {
-		return "", err
+	if int(length) > d.r.Len() {
+		return "", fmt.Errorf("long string length %d exceeds remaining data %d", length, d.r.Len())
 	}
+	buf := make([]byte, length)
+	// unreachable error: length <= d.r.Len() is guaranteed above; bytes.Reader never fails
+	_, _ = io.ReadFull(&d.r, buf)
 	return string(buf), nil
 }
 
@@ -153,6 +154,9 @@ func (d *AMF0Decoder) decodeStrictArray() ([]any, error) {
 	if err := binary.Read(&d.r, binary.BigEndian, &count); err != nil {
 		return nil, err
 	}
+	if int(count) > d.r.Len() {
+		return nil, fmt.Errorf("strict array count %d exceeds remaining data %d", count, d.r.Len())
+	}
 	arr := make([]any, count)
 	for i := uint32(0); i < count; i++ {
 		v, err := d.decodeAMF0()
@@ -175,9 +179,5 @@ func (d *AMF0Decoder) decodeDate() (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	sec := int64(millis / 1000)
-	fracMillis := math.Mod(millis, 1000)
-	nanoSec := int64(fracMillis * 1e6)
-
-	return time.Unix(sec, nanoSec).UTC(), nil
+	return time.UnixMilli(int64(millis)).UTC(), nil
 }

@@ -32,8 +32,11 @@ func TestAMF0Decoder_Reuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first[0] == second[0] {
-		t.Error("reuse should produce different results")
+	if first[0].(float64) != 3.14 {
+		t.Errorf("first decode wrong: %v", first[0])
+	}
+	if second[0].(string) != "hello" {
+		t.Errorf("second decode wrong: %v", second[0])
 	}
 }
 
@@ -310,6 +313,13 @@ func TestDecodeAMF0_StrictArray_MalformedLength(t *testing.T) {
 	}
 }
 
+func TestDecodeAMF0_StrictArray_OversizedCount(t *testing.T) {
+	_, err := NewAMF0Decoder().Decode([]byte{0x0A, 0xFF, 0xFF, 0xFF, 0xFF})
+	if err == nil {
+		t.Fatal("expected error for count exceeding remaining data")
+	}
+}
+
 func TestDecodeAMF0_StrictArray_MalformedElement(t *testing.T) {
 	data := []byte{0x0A, 0x00, 0x00, 0x00, 0x02,
 		0x02, 0x00, 0x01, 'a',
@@ -375,6 +385,13 @@ func TestDecodeAMF0_LongString_MalformedShortLength(t *testing.T) {
 	_, err := NewAMF0Decoder().Decode([]byte{0x0c, 0x00, 0x00, 0x00})
 	if err == nil {
 		t.Fatal("expected error for incomplete long string length")
+	}
+}
+
+func TestDecodeAMF0_LongString_OversizedLength(t *testing.T) {
+	_, err := NewAMF0Decoder().Decode([]byte{0x0c, 0xFF, 0xFF, 0xFF, 0xFF})
+	if err == nil {
+		t.Fatal("expected error for length exceeding remaining data")
 	}
 }
 

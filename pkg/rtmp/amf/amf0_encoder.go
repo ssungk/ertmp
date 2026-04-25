@@ -45,11 +45,19 @@ func (e *AMF0Encoder) encodeValue(value any) error {
 		e.writeNumber(float64(v))
 	case int:
 		e.writeNumber(float64(v))
+	case int8:
+		e.writeNumber(float64(v))
+	case int16:
+		e.writeNumber(float64(v))
 	case int32:
 		e.writeNumber(float64(v))
 	case int64:
 		e.writeNumber(float64(v))
 	case uint:
+		e.writeNumber(float64(v))
+	case uint8:
+		e.writeNumber(float64(v))
+	case uint16:
 		e.writeNumber(float64(v))
 	case uint32:
 		e.writeNumber(float64(v))
@@ -157,6 +165,6 @@ func (e *AMF0Encoder) encodeStrictArray(arr []any) error {
 func (e *AMF0Encoder) encodeDate(t time.Time) {
 	var b [11]byte
 	b[0] = dateMarker
-	binary.BigEndian.PutUint64(b[1:], math.Float64bits(float64(t.UnixNano())/1e6))
+	binary.BigEndian.PutUint64(b[1:], math.Float64bits(float64(t.UnixMilli())))
 	e.buf.Write(b[:])
 }

@@ -136,6 +136,46 @@ func TestEncodeValue_Uint64(t *testing.T) {
 	}
 }
 
+func TestEncodeValue_Int8(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode(int8(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
+	}
+}
+
+func TestEncodeValue_Int16(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode(int16(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
+	}
+}
+
+func TestEncodeValue_Uint8(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode(uint8(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
+	}
+}
+
+func TestEncodeValue_Uint16(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode(uint16(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != numberMarker {
+		t.Errorf("expected numberMarker, got 0x%02x", data[0])
+	}
+}
+
 func TestEncodeAMF0_Boolean(t *testing.T) {
 	enc := NewAMF0Encoder()
 
@@ -375,6 +415,26 @@ func TestEncodeAMF0_Date(t *testing.T) {
 	}
 	if data[0] != dateMarker {
 		t.Errorf("expected dateMarker (0x%02x), got 0x%02x", dateMarker, data[0])
+	}
+}
+
+func TestEncodeAMF0_Date_RoundTrip(t *testing.T) {
+	// time.Time round-trip은 AMF0가 밀리초 정밀도이므로 ms 단위까지만 보존됨
+	original := time.Date(2023, 3, 28, 19, 40, 0, 123*int(time.Millisecond), time.UTC)
+	data, err := NewAMF0Encoder().Encode(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := vals[0].(time.Time)
+	if !ok {
+		t.Fatalf("expected time.Time, got %T", vals[0])
+	}
+	if !got.Equal(original) {
+		t.Errorf("expected %v, got %v", original, got)
 	}
 }
 
