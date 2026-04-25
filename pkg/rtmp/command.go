@@ -3,6 +3,7 @@ package rtmp
 import (
 	"fmt"
 
+	"github.com/ssungk/ertmp/pkg/rtmp/amf"
 	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
@@ -133,8 +134,11 @@ func ParseConnect(cmd *Command) (*ConnectCommand, error) {
 				}
 			}
 		}
-		if capsEx, ok := cmd.Object["capsEx"].(map[string]interface{}); ok {
-			cc.CapsEx = capsEx
+		switch v := cmd.Object["capsEx"].(type) {
+		case map[string]interface{}:
+			cc.CapsEx = v
+		case amf.ECMAArray:
+			cc.CapsEx = map[string]interface{}(v)
 		}
 	}
 

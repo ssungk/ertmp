@@ -213,6 +213,67 @@ func TestEncodeAMF0_Object(t *testing.T) {
 	}
 }
 
+func TestEncodeAMF0_ECMAArray_UnsupportedValue(t *testing.T) {
+	type unsupportedType struct{}
+	_, err := NewAMF0Encoder().Encode(ECMAArray{"key": unsupportedType{}})
+	if err == nil {
+		t.Fatal("expected error for unsupported value in ECMAArray")
+	}
+}
+
+func TestEncodeAMF0_ECMAArray(t *testing.T) {
+	arr := ECMAArray{"key": "val"}
+	data, err := NewAMF0Encoder().Encode(arr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []byte{
+		0x08,
+		0x00, 0x00, 0x00, 0x01,
+		0x00, 0x03, 'k', 'e', 'y',
+		0x02, 0x00, 0x03, 'v', 'a', 'l',
+		0x00, 0x00, 0x09,
+	}
+	if !bytes.Equal(data, expected) {
+		t.Errorf("expected %v, got %v", expected, data)
+	}
+}
+
+func TestEncodeAMF0_ECMAArray_RoundTrip(t *testing.T) {
+	original := ECMAArray{"width": 1920.0, "height": 1080.0}
+	data, err := NewAMF0Encoder().Encode(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != ecmaArrayMarker {
+		t.Errorf("expected ecmaArrayMarker 0x%02x, got 0x%02x", ecmaArrayMarker, data[0])
+	}
+
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, ok := vals[0].(ECMAArray)
+	if !ok {
+		t.Fatalf("expected ECMAArray, got %T", vals[0])
+	}
+	if decoded["width"] != 1920.0 || decoded["height"] != 1080.0 {
+		t.Errorf("round-trip mismatch: %v", decoded)
+	}
+}
+
+func TestEncodeAMF0_ECMAArray_MapDoesNotEncode(t *testing.T) {
+	// map[string]any는 Object(0x03)로 인코딩되어야 함
+	data, err := NewAMF0Encoder().Encode(map[string]any{"key": "val"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != objectMarker {
+		t.Errorf("expected objectMarker 0x%02x, got 0x%02x", objectMarker, data[0])
+	}
+}
+
 func TestEncodeAMF0_Object_UnsupportedValue(t *testing.T) {
 	type unsupportedType struct{}
 	_, err := NewAMF0Encoder().Encode(map[string]any{"key": unsupportedType{}})

@@ -1,5 +1,9 @@
 package amf
 
+// ECMAArray is a map type that encodes as AMF0 ECMA Array (0x08) instead of Object (0x03).
+// Use this when the AMF0 ECMA Array marker must be preserved, e.g. onMetaData.
+type ECMAArray map[string]any
+
 // AMF0 Type Markers
 const (
 	numberMarker      = 0x00

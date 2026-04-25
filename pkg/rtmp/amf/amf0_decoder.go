@@ -109,12 +109,16 @@ func (d *AMF0Decoder) decodeLongString() (string, error) {
 	return string(buf), nil
 }
 
-func (d *AMF0Decoder) decodeECMAArray() (map[string]any, error) {
+func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
 	var length uint32
 	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
 		return nil, err
 	}
-	return d.decodeObject()
+	m, err := d.decodeObject()
+	if err != nil {
+		return nil, err
+	}
+	return ECMAArray(m), nil
 }
 
 func (d *AMF0Decoder) decodeObject() (map[string]any, error) {

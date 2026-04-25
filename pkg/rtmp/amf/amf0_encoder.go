@@ -57,6 +57,8 @@ func (e *AMF0Encoder) encodeValue(value any) error {
 		e.writeNumber(float64(v))
 	case string:
 		e.encodeString(v)
+	case ECMAArray:
+		return e.encodeECMAArray(v)
 	case map[string]any:
 		return e.encodeObject(v)
 	case []any:
@@ -90,6 +92,25 @@ func (e *AMF0Encoder) encodeString(s string) {
 		e.buf.Write(b[:])
 	}
 	e.buf.WriteString(s)
+}
+
+func (e *AMF0Encoder) encodeECMAArray(arr ECMAArray) error {
+	var b [5]byte
+	b[0] = ecmaArrayMarker
+	binary.BigEndian.PutUint32(b[1:], uint32(len(arr)))
+	e.buf.Write(b[:])
+	keys := make([]string, 0, len(arr))
+	for k := range arr {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if err := e.encodeObjectProperty(key, arr[key]); err != nil {
+			return err
+		}
+	}
+	e.buf.Write([]byte{0x00, 0x00, objectEndMarker})
+	return nil
 }
 
 func (e *AMF0Encoder) encodeObject(obj map[string]any) error {

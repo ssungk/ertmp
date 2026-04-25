@@ -266,9 +266,9 @@ func TestDecodeAMF0_ECMAArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, ok := vals[0].(map[string]any)
+	m, ok := vals[0].(ECMAArray)
 	if !ok || m["key"] != "val" {
-		t.Errorf("expected key=val, got %v", vals[0])
+		t.Errorf("expected ECMAArray with key=val, got %T %v", vals[0], vals[0])
 	}
 }
 
@@ -276,6 +276,13 @@ func TestDecodeAMF0_ECMAArray_MalformedLength(t *testing.T) {
 	_, err := NewAMF0Decoder().Decode([]byte{0x08, 0x00, 0x00})
 	if err == nil {
 		t.Fatal("expected error for malformed ECMA array length")
+	}
+}
+
+func TestDecodeAMF0_ECMAArray_MalformedBody(t *testing.T) {
+	_, err := NewAMF0Decoder().Decode([]byte{0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 'k'})
+	if err == nil {
+		t.Fatal("expected error for malformed ECMA array body")
 	}
 }
 

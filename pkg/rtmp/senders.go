@@ -3,6 +3,7 @@ package rtmp
 import (
 	"fmt"
 
+	"github.com/ssungk/ertmp/pkg/rtmp/amf"
 	"github.com/ssungk/ertmp/pkg/rtmp/buf"
 	"github.com/ssungk/ertmp/pkg/rtmp/transport"
 )
@@ -49,7 +50,7 @@ func SendAudio(conn *Conn, streamID uint32, data []byte, timestamp uint32) error
 // SendMetadata sends metadata
 func SendMetadata(conn *Conn, streamID uint32, metadata map[string]interface{}) error {
 	// 메타데이터 인코딩
-	cmdData, err := conn.EncodeCommand("@setDataFrame", 0, nil, "onMetaData", metadata)
+	cmdData, err := conn.EncodeCommand("@setDataFrame", 0, nil, "onMetaData", amf.ECMAArray(metadata))
 	if err != nil {
 		return fmt.Errorf("failed to encode metadata: %w", err)
 	}
