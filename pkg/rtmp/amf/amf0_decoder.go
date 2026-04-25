@@ -116,6 +116,7 @@ func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
 	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
 		return nil, err
 	}
+	_ = length // AMF0 spec §2.10: associative-count is approximate; parsing ends at the object-end marker
 	m, err := d.decodeObject()
 	if err != nil {
 		return nil, err
@@ -132,6 +133,7 @@ func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
 			return nil, err
 		}
 		if len(key) == 0 {
+			// AMF0 object-end is 0x00 0x00 0x09: empty key signals end, next byte must be objectEndMarker
 			b, err := d.r.ReadByte()
 			if err != nil {
 				return nil, err
@@ -179,6 +181,7 @@ func (d *AMF0Decoder) decodeDate() (time.Time, error) {
 	if _, err := io.ReadFull(&d.r, offset[:]); err != nil {
 		return time.Time{}, err
 	}
+	_ = offset // AMF0 spec §2.13: timezone offset is deprecated and always 0; UTC is assumed
 
 	return time.UnixMilli(int64(millis)).UTC(), nil
 }

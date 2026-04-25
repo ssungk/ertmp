@@ -25,7 +25,7 @@ func (e *AMF0Encoder) Encode(values ...any) ([]byte, error) {
 		}
 	}
 	result := make([]byte, e.buf.Len())
-	copy(result, e.buf.Bytes())
+	copy(result, e.buf.Bytes()) // copy before Reset: buf.Bytes() shares the backing array
 	return result, nil
 }
 
@@ -112,7 +112,7 @@ func (e *AMF0Encoder) encodeECMAArray(arr ECMAArray) error {
 	for k := range arr {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Strings(keys) // deterministic output: map iteration order is random in Go
 	for _, key := range keys {
 		if err := e.encodeObjectProperty(key, arr[key]); err != nil {
 			return err
@@ -130,7 +130,7 @@ func (e *AMF0Encoder) encodeObject(obj map[string]any) error {
 	for k := range obj {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Strings(keys) // deterministic output: map iteration order is random in Go
 	for _, key := range keys {
 		if err := e.encodeObjectProperty(key, obj[key]); err != nil {
 			return err
