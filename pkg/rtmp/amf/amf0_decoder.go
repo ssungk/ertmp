@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"time"
 )
 
@@ -73,9 +74,11 @@ func (d *AMF0Decoder) decodeAMF0() (any, error) {
 }
 
 func (d *AMF0Decoder) decodeNumber() (float64, error) {
-	var num float64
-	err := binary.Read(&d.r, binary.BigEndian, &num)
-	return num, err
+	var b [8]byte
+	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
+		return 0, err
+	}
+	return math.Float64frombits(binary.BigEndian.Uint64(b[:])), nil
 }
 
 func (d *AMF0Decoder) decodeBoolean() (bool, error) {
@@ -87,11 +90,11 @@ func (d *AMF0Decoder) decodeBoolean() (bool, error) {
 }
 
 func (d *AMF0Decoder) decodeString() (string, error) {
-	var length uint16
-	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
+	var b [2]byte
+	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
 		return "", err
 	}
-	buf := make([]byte, length)
+	buf := make([]byte, binary.BigEndian.Uint16(b[:]))
 	if _, err := io.ReadFull(&d.r, buf); err != nil {
 		return "", err
 	}
@@ -99,24 +102,28 @@ func (d *AMF0Decoder) decodeString() (string, error) {
 }
 
 func (d *AMF0Decoder) decodeLongString() (string, error) {
-	var length uint32
-	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
+	var b [4]byte
+	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
 		return "", err
 	}
+	length := binary.BigEndian.Uint32(b[:])
 	if int64(length) > int64(d.r.Len()) {
 		return "", fmt.Errorf("long string length %d exceeds remaining data %d", length, d.r.Len())
 	}
 	buf := make([]byte, length)
-	_, _ = io.ReadFull(&d.r, buf) // length <= d.r.Len() guaranteed above
+	// length <= d.r.Len() is guaranteed above, so io.ReadFull on bytes.Reader cannot fail.
+	// Error return is intentionally omitted: adding "if err != nil" would create an
+	// unreachable branch that breaks 100% statement coverage.
+	_, _ = io.ReadFull(&d.r, buf)
 	return string(buf), nil
 }
 
 func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
-	var length uint32
-	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
+	var b [4]byte
+	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
 		return nil, err
 	}
-	_ = length // AMF0 spec §2.10: associative-count is approximate; parsing ends at the object-end marker
+	// AMF0 spec §2.10: associative-count is approximate; parsing ends at the object-end marker
 	m, err := d.decodeObject()
 	if err != nil {
 		return nil, err
@@ -153,10 +160,11 @@ func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
 }
 
 func (d *AMF0Decoder) decodeStrictArray() ([]any, error) {
-	var count uint32
-	if err := binary.Read(&d.r, binary.BigEndian, &count); err != nil {
+	var b [4]byte
+	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
 		return nil, err
 	}
+	count := binary.BigEndian.Uint32(b[:])
 	if int64(count) > int64(d.r.Len()) {
 		return nil, fmt.Errorf("strict array count %d exceeds remaining data %d", count, d.r.Len())
 	}
@@ -172,10 +180,11 @@ func (d *AMF0Decoder) decodeStrictArray() ([]any, error) {
 }
 
 func (d *AMF0Decoder) decodeDate() (time.Time, error) {
-	var millis float64
-	if err := binary.Read(&d.r, binary.BigEndian, &millis); err != nil {
+	var b [8]byte
+	if _, err := io.ReadFull(&d.r, b[:]); err != nil {
 		return time.Time{}, err
 	}
+	millis := math.Float64frombits(binary.BigEndian.Uint64(b[:]))
 
 	var offset [2]byte
 	if _, err := io.ReadFull(&d.r, offset[:]); err != nil {

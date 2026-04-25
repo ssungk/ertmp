@@ -25,7 +25,7 @@ func (e *AMF0Encoder) Encode(values ...any) ([]byte, error) {
 		}
 	}
 	result := make([]byte, e.buf.Len())
-	copy(result, e.buf.Bytes()) // copy before Reset: buf.Bytes() shares the backing array
+	copy(result, e.buf.Bytes()) // independent copy: buf is reused on next Encode call
 	return result, nil
 }
 
@@ -162,5 +162,6 @@ func (e *AMF0Encoder) encodeDate(t time.Time) {
 	var b [11]byte
 	b[0] = dateMarker
 	binary.BigEndian.PutUint64(b[1:], math.Float64bits(float64(t.UnixMilli())))
+	// b[9:11] = 0x0000: timezone offset, deprecated and always 0 per AMF0 spec §2.13
 	e.buf.Write(b[:])
 }

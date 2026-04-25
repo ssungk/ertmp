@@ -78,7 +78,7 @@ func TestDecodeAMF0_UnknownMarker(t *testing.T) {
 	}
 }
 
-func TestDecodeAMF0_NotImplementedMarkers(t *testing.T) {
+func TestDecodeAMF0_UnsupportedMarkers(t *testing.T) {
 	testCases := []struct {
 		name   string
 		marker byte
@@ -125,7 +125,7 @@ func TestDecodeAMF0_Boolean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if vals[0].(bool) != true {
+	if !vals[0].(bool) {
 		t.Errorf("expected true, got %v", vals[0])
 	}
 }

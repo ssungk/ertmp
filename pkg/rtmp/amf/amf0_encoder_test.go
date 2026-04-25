@@ -392,17 +392,19 @@ func TestEncodeAMF0_Date(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(data) != 11 {
-		t.Errorf("expected 11 bytes for date, got %d", len(data))
+	expected := []byte{
+		0x0B,
+		0x42, 0x78, 0x72, 0x9B, 0xC0, 0x2F, 0xB0, 0x00,
+		0x00, 0x00,
 	}
-	if data[0] != dateMarker {
-		t.Errorf("expected dateMarker (0x%02x), got 0x%02x", dateMarker, data[0])
+	if !bytes.Equal(data, expected) {
+		t.Errorf("expected %v, got %v", expected, data)
 	}
 }
 
 func TestEncodeAMF0_Date_RoundTrip(t *testing.T) {
 	// time.Time round-trip은 AMF0가 밀리초 정밀도이므로 ms 단위까지만 보존됨
-	original := time.Date(2023, 3, 28, 19, 40, 0, 123*int(time.Millisecond), time.UTC)
+	original := time.Date(2023, 3, 28, 19, 40, 0, 123_000_000, time.UTC)
 	data, err := NewAMF0Encoder().Encode(original)
 	if err != nil {
 		t.Fatal(err)
@@ -562,6 +564,18 @@ func BenchmarkEncodeAMF0_String(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = enc.Encode("hello world")
+	}
+}
+
+func TestEncodeAMF0_ECMAArray_Empty(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode(ECMAArray{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []byte{0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09}
+	if !bytes.Equal(data, expected) {
+		t.Errorf("expected %v, got %v", expected, data)
 	}
 }
 
