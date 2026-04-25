@@ -121,7 +121,7 @@ func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ECMAArray(m), nil
+	return m, nil
 }
 
 func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
