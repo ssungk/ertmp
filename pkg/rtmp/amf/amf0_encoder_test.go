@@ -3,6 +3,8 @@ package amf
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -500,12 +502,70 @@ func TestEncodeAMF0_RoundTrip(t *testing.T) {
 				if decoded[0] != nil {
 					t.Errorf("expected nil, got %v", decoded[0])
 				}
-			default:
-				if decoded[0] == nil {
-					t.Errorf("decoded value is nil")
+			case []any:
+				got, ok := decoded[0].([]any)
+				if !ok {
+					t.Fatalf("expected []any, got %T", decoded[0])
+				}
+				if !reflect.DeepEqual(got, orig) {
+					t.Errorf("expected %v, got %v", orig, got)
+				}
+			case map[string]any:
+				got, ok := decoded[0].(map[string]any)
+				if !ok {
+					t.Fatalf("expected map[string]any, got %T", decoded[0])
+				}
+				if !reflect.DeepEqual(got, orig) {
+					t.Errorf("expected %v, got %v", orig, got)
 				}
 			}
 		})
+	}
+}
+
+func TestEncodeAMF0_NaN_RoundTrip(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode(math.NaN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !math.IsNaN(vals[0].(float64)) {
+		t.Errorf("expected NaN, got %v", vals[0])
+	}
+}
+
+func TestEncodeAMF0_Inf_RoundTrip(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode(math.Inf(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !math.IsInf(vals[0].(float64), 1) {
+		t.Errorf("expected +Inf, got %v", vals[0])
+	}
+}
+
+func TestEncodeAMF0_NestedObject_RoundTrip(t *testing.T) {
+	original := map[string]any{
+		"meta": map[string]any{"width": 1920.0, "height": 1080.0},
+		"tags": []any{"live", "hd"},
+	}
+	data, err := NewAMF0Encoder().Encode(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(vals[0], original) {
+		t.Errorf("expected %v, got %v", original, vals[0])
 	}
 }
 

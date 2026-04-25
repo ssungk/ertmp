@@ -60,17 +60,21 @@ func TestDecodeAMF0Sequence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, ok := values[0].(float64); !ok {
-		t.Fatalf("expected float64, got %T", values[0])
+	if values[0].(float64) != 3.14 {
+		t.Errorf("expected 3.14, got %v", values[0])
 	}
-	if _, ok := values[1].(bool); !ok {
-		t.Fatalf("expected bool, got %T", values[1])
+	if values[1].(bool) != true {
+		t.Errorf("expected true, got %v", values[1])
 	}
-	if _, ok := values[2].(string); !ok {
-		t.Fatalf("expected string, got %T", values[2])
+	if values[2].(string) != "hello" {
+		t.Errorf("expected \"hello\", got %v", values[2])
 	}
-	if _, ok := values[3].(map[string]any); !ok {
-		t.Fatalf("expected map, got %T", values[3])
+	m, ok := values[3].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", values[3])
+	}
+	if m["foo"] != "bar" {
+		t.Errorf("expected foo=bar, got %v", m["foo"])
 	}
 }
 
@@ -272,6 +276,26 @@ func TestDecodeAMF0_ECMAArray(t *testing.T) {
 	m, ok := vals[0].(ECMAArray)
 	if !ok || m["key"] != "val" {
 		t.Errorf("expected ECMAArray with key=val, got %T %v", vals[0], vals[0])
+	}
+}
+
+func TestDecodeAMF0_ECMAArray_TypeAssertion(t *testing.T) {
+	data := []byte{
+		0x08,
+		0x00, 0x00, 0x00, 0x01,
+		0x00, 0x03, 'k', 'e', 'y',
+		0x02, 0x00, 0x03, 'v', 'a', 'l',
+		0x00, 0x00, 0x09,
+	}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := vals[0].(ECMAArray); !ok {
+		t.Errorf("expected ECMAArray assertion to succeed, got %T", vals[0])
+	}
+	if _, ok := vals[0].(map[string]any); ok {
+		t.Errorf("ECMAArray should not be assertable as map[string]any")
 	}
 }
 
