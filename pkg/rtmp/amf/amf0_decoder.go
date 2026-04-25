@@ -42,6 +42,8 @@ func DecodeAMF0(r io.Reader) (any, error) {
 		return decodeObject(r)
 	case nullMarker, undefinedMarker:
 		return decodeNull(r)
+	case referenceMarker:
+		return nil, fmt.Errorf("AMF0 reference not implemented")
 	case ecmaArrayMarker:
 		return decodeECMAArray(r)
 	case strictArrayMarker:
@@ -50,8 +52,16 @@ func DecodeAMF0(r io.Reader) (any, error) {
 		return decodeDate(r)
 	case longStringMarker:
 		return decodeLongString(r)
+	case unsupportedMarker:
+		return nil, fmt.Errorf("AMF0 unsupported not implemented")
+	case xmlDocumentMarker:
+		return nil, fmt.Errorf("AMF0 xml-document not implemented")
+	case typedObjectMarker:
+		return nil, fmt.Errorf("AMF0 typed-object not implemented")
+	case avmPlusMarker:
+		return nil, fmt.Errorf("AMF0 AMF3 switch not implemented")
 	default:
-		return nil, fmt.Errorf("unsupported AMF0 marker: 0x%x", marker[0])
+		return nil, fmt.Errorf("unknown AMF0 marker: 0x%x", marker[0])
 	}
 }
 

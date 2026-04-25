@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io"
+	"math"
 	"time"
 )
 
@@ -18,147 +18,109 @@ func EncodeAMF0Sequence(values ...any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func encodeValue(w io.Writer, value any) error {
+func encodeValue(buf *bytes.Buffer, value any) error {
 	switch v := value.(type) {
 	case nil:
-		_, err := w.Write([]byte{nullMarker})
-		return err
+		buf.WriteByte(nullMarker)
 	case bool:
 		b := byte(0)
 		if v {
 			b = 1
 		}
-		_, err := w.Write([]byte{booleanMarker, b})
-		return err
+		buf.Write([]byte{booleanMarker, b})
 	case float64:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, v)
+		writeNumber(buf, v)
 	case float32:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, float64(v))
+		writeNumber(buf, float64(v))
 	case int:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, float64(v))
+		writeNumber(buf, float64(v))
 	case int32:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, float64(v))
+		writeNumber(buf, float64(v))
 	case int64:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, float64(v))
+		writeNumber(buf, float64(v))
 	case uint:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, float64(v))
+		writeNumber(buf, float64(v))
 	case uint32:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, float64(v))
+		writeNumber(buf, float64(v))
 	case uint64:
-		if err := writeByte(w, numberMarker); err != nil {
-			return err
-		}
-		return binary.Write(w, binary.BigEndian, float64(v))
+		writeNumber(buf, float64(v))
 	case string:
-		return encodeString(w, v)
+		encodeString(buf, v)
 	case map[string]any:
-		return encodeObject(w, v)
+		return encodeObject(buf, v)
 	case []any:
-		return encodeStrictArray(w, v)
+		return encodeStrictArray(buf, v)
 	case time.Time:
-		return encodeDate(w, v)
+		encodeDate(buf, v)
 	default:
 		return fmt.Errorf("unsupported AMF0 type: %T", value)
 	}
+	return nil
 }
 
-func encodeString(w io.Writer, s string) error {
-	byteLen := len([]byte(s)) // UTF-8 바이트 길이로 정확히 측정
+func writeNumber(buf *bytes.Buffer, v float64) {
+	var b [9]byte
+	b[0] = numberMarker
+	binary.BigEndian.PutUint64(b[1:], math.Float64bits(v))
+	buf.Write(b[:])
+}
+
+func encodeString(buf *bytes.Buffer, s string) {
+	byteLen := len(s)
 	if byteLen < 65536 {
-		if err := writeByte(w, stringMarker); err != nil {
-			return err
-		}
-		if err := binary.Write(w, binary.BigEndian, uint16(byteLen)); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, s)
-		return err
+		var b [3]byte
+		b[0] = stringMarker
+		binary.BigEndian.PutUint16(b[1:], uint16(byteLen))
+		buf.Write(b[:])
 	} else {
-		if err := writeByte(w, longStringMarker); err != nil {
-			return err
-		}
-		if err := binary.Write(w, binary.BigEndian, uint32(byteLen)); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, s)
-		return err
+		var b [5]byte
+		b[0] = longStringMarker
+		binary.BigEndian.PutUint32(b[1:], uint32(byteLen))
+		buf.Write(b[:])
 	}
+	buf.WriteString(s)
 }
 
-func encodeObject(w io.Writer, obj map[string]any) error {
-	if err := writeByte(w, objectMarker); err != nil {
-		return err
-	}
+func encodeObject(buf *bytes.Buffer, obj map[string]any) error {
+	buf.WriteByte(objectMarker)
 	for key, val := range obj {
-		if err := encodeObjectProperty(w, key, val); err != nil {
+		if err := encodeObjectProperty(buf, key, val); err != nil {
 			return err
 		}
 	}
-	// object end marker: 0x00 0x00 0x09
-	_, err := w.Write([]byte{0x00, 0x00, objectEndMarker})
-	return err
+	buf.Write([]byte{0x00, 0x00, objectEndMarker})
+	return nil
 }
 
-func encodeObjectProperty(w io.Writer, key string, val any) error {
-	keyByteLen := len([]byte(key)) // UTF-8 바이트 길이로 정확히 측정
+func encodeObjectProperty(buf *bytes.Buffer, key string, val any) error {
+	keyByteLen := len(key)
 	if keyByteLen > 65535 {
 		return fmt.Errorf("object key too long: %d bytes (max 65535)", keyByteLen)
 	}
-	if err := binary.Write(w, binary.BigEndian, uint16(keyByteLen)); err != nil {
-		return err
-	}
-	if _, err := io.WriteString(w, key); err != nil {
-		return err
-	}
-	return encodeValue(w, val)
+	var b [2]byte
+	binary.BigEndian.PutUint16(b[:], uint16(keyByteLen))
+	buf.Write(b[:])
+	buf.WriteString(key)
+	return encodeValue(buf, val)
 }
 
-func encodeStrictArray(w io.Writer, arr []any) error {
-	if err := writeByte(w, strictArrayMarker); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.BigEndian, uint32(len(arr))); err != nil {
-		return err
-	}
+func encodeStrictArray(buf *bytes.Buffer, arr []any) error {
+	var b [5]byte
+	b[0] = strictArrayMarker
+	binary.BigEndian.PutUint32(b[1:], uint32(len(arr)))
+	buf.Write(b[:])
 	for _, v := range arr {
-		if err := encodeValue(w, v); err != nil {
+		if err := encodeValue(buf, v); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func encodeDate(w io.Writer, t time.Time) error {
-	if err := writeByte(w, dateMarker); err != nil {
-		return err
-	}
-	ms := float64(t.UnixNano()) / 1e6
-	if err := binary.Write(w, binary.BigEndian, ms); err != nil {
-		return err
-	}
-	// timezone, always 0
-	return binary.Write(w, binary.BigEndian, int16(0))
+func encodeDate(buf *bytes.Buffer, t time.Time) {
+	var b [11]byte
+	b[0] = dateMarker
+	binary.BigEndian.PutUint64(b[1:], math.Float64bits(float64(t.UnixNano())/1e6))
+	// b[9], b[10] = 0x00, 0x00 (timezone, always 0)
+	buf.Write(b[:])
 }
-
-

@@ -49,11 +49,32 @@ func TestDecodeAMF0_InvalidInput_EmptyReader(t *testing.T) {
 	}
 }
 
-func TestDecodeAMF0_UnsupportedMarker(t *testing.T) {
+func TestDecodeAMF0_UnknownMarker(t *testing.T) {
 	data := []byte{0xff}
 	_, err := DecodeAMF0(bytes.NewReader(data))
 	if err == nil {
-		t.Fatal("expected error for unsupported marker")
+		t.Fatal("expected error for unknown marker")
+	}
+}
+
+func TestDecodeAMF0_NotImplementedMarkers(t *testing.T) {
+	testCases := []struct {
+		name   string
+		marker byte
+	}{
+		{"reference", referenceMarker},
+		{"unsupported", unsupportedMarker},
+		{"xmlDocument", xmlDocumentMarker},
+		{"typedObject", typedObjectMarker},
+		{"avmPlus", avmPlusMarker},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := DecodeAMF0(bytes.NewReader([]byte{tc.marker}))
+			if err == nil {
+				t.Fatalf("expected error for marker 0x%02x", tc.marker)
+			}
+		})
 	}
 }
 
