@@ -38,7 +38,8 @@ func (e *AMF0Encoder) encodeValue(value any) error {
 		if v {
 			b = 1
 		}
-		e.buf.Write([]byte{booleanMarker, b})
+		e.buf.WriteByte(booleanMarker)
+		e.buf.WriteByte(b)
 	case float64:
 		e.writeNumber(v)
 	case float32:
@@ -117,7 +118,9 @@ func (e *AMF0Encoder) encodeECMAArray(arr ECMAArray) error {
 			return err
 		}
 	}
-	e.buf.Write([]byte{0x00, 0x00, objectEndMarker})
+	e.buf.WriteByte(0x00)
+	e.buf.WriteByte(0x00)
+	e.buf.WriteByte(objectEndMarker)
 	return nil
 }
 
@@ -133,7 +136,9 @@ func (e *AMF0Encoder) encodeObject(obj map[string]any) error {
 			return err
 		}
 	}
-	e.buf.Write([]byte{0x00, 0x00, objectEndMarker})
+	e.buf.WriteByte(0x00)
+	e.buf.WriteByte(0x00)
+	e.buf.WriteByte(objectEndMarker)
 	return nil
 }
 

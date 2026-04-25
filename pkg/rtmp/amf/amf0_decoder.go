@@ -65,6 +65,8 @@ func (d *AMF0Decoder) decodeAMF0() (any, error) {
 		return nil, fmt.Errorf("AMF0 typed-object not implemented")
 	case avmPlusMarker:
 		return nil, fmt.Errorf("AMF0 AMF3 switch not implemented")
+	case movieClipMarker, recordSetMarker:
+		return nil, fmt.Errorf("AMF0 reserved marker: 0x%02x", marker)
 	default:
 		return nil, fmt.Errorf("unknown AMF0 marker: 0x%x", marker)
 	}
@@ -101,12 +103,11 @@ func (d *AMF0Decoder) decodeLongString() (string, error) {
 	if err := binary.Read(&d.r, binary.BigEndian, &length); err != nil {
 		return "", err
 	}
-	if int(length) > d.r.Len() {
+	if int64(length) > int64(d.r.Len()) {
 		return "", fmt.Errorf("long string length %d exceeds remaining data %d", length, d.r.Len())
 	}
 	buf := make([]byte, length)
-	// unreachable error: length <= d.r.Len() is guaranteed above; bytes.Reader never fails
-	_, _ = io.ReadFull(&d.r, buf)
+	_, _ = io.ReadFull(&d.r, buf) // length <= d.r.Len() guaranteed above
 	return string(buf), nil
 }
 
@@ -154,7 +155,7 @@ func (d *AMF0Decoder) decodeStrictArray() ([]any, error) {
 	if err := binary.Read(&d.r, binary.BigEndian, &count); err != nil {
 		return nil, err
 	}
-	if int(count) > d.r.Len() {
+	if int64(count) > int64(d.r.Len()) {
 		return nil, fmt.Errorf("strict array count %d exceeds remaining data %d", count, d.r.Len())
 	}
 	arr := make([]any, count)
