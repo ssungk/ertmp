@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -77,7 +78,7 @@ func (e *AMF0Encoder) writeNumber(v float64) {
 
 func (e *AMF0Encoder) encodeString(s string) {
 	byteLen := len(s)
-	if byteLen < 65536 {
+	if byteLen <= 65535 {
 		var b [3]byte
 		b[0] = stringMarker
 		binary.BigEndian.PutUint16(b[1:], uint16(byteLen))
@@ -93,8 +94,13 @@ func (e *AMF0Encoder) encodeString(s string) {
 
 func (e *AMF0Encoder) encodeObject(obj map[string]any) error {
 	e.buf.WriteByte(objectMarker)
-	for key, val := range obj {
-		if err := e.encodeObjectProperty(key, val); err != nil {
+	keys := make([]string, 0, len(obj))
+	for k := range obj {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if err := e.encodeObjectProperty(key, obj[key]); err != nil {
 			return err
 		}
 	}
