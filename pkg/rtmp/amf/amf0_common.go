@@ -25,4 +25,3 @@ const (
 	typedObjectMarker = 0x10 // not implemented
 	avmPlusMarker     = 0x11 // not implemented (AMF3)
 )
-

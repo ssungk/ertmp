@@ -1,10 +1,10 @@
 package amf
 
 import (
+	"math"
 	"testing"
 	"time"
 )
-
 
 func TestAMF0Decoder_Reuse(t *testing.T) {
 	dec := NewAMF0Decoder()
@@ -127,6 +127,16 @@ func TestDecodeAMF0_Boolean(t *testing.T) {
 	}
 	if !vals[0].(bool) {
 		t.Errorf("expected true, got %v", vals[0])
+	}
+}
+
+func TestDecodeAMF0_Boolean_False(t *testing.T) {
+	vals, err := NewAMF0Decoder().Decode([]byte{0x01, 0x00})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vals[0].(bool) {
+		t.Errorf("expected false, got true")
 	}
 }
 
@@ -327,6 +337,18 @@ func TestDecodeAMF0_StrictArray(t *testing.T) {
 	}
 }
 
+func TestDecodeAMF0_StrictArray_Empty(t *testing.T) {
+	data := []byte{0x0A, 0x00, 0x00, 0x00, 0x00}
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arr, ok := vals[0].([]any)
+	if !ok || len(arr) != 0 {
+		t.Errorf("expected empty []any, got %v", vals[0])
+	}
+}
+
 func TestDecodeAMF0_StrictArray_MalformedLength(t *testing.T) {
 	_, err := NewAMF0Decoder().Decode([]byte{0x0A, 0x00, 0x00, 0x00})
 	if err == nil {
@@ -418,6 +440,33 @@ func TestDecodeAMF0_Date_Inf(t *testing.T) {
 	}
 }
 
+func TestDecodeAMF0_Date_NegInf(t *testing.T) {
+	data := []byte{
+		0x0B,
+		0xFF, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // -Inf
+		0x00, 0x00,
+	}
+	_, err := NewAMF0Decoder().Decode(data)
+	if err == nil {
+		t.Error("expected error for -Inf millis")
+	}
+}
+
+func TestDecodeAMF0_Date_OverflowInt64(t *testing.T) {
+	// 1e30 is a finite float64 but exceeds MaxInt64; int64(1e30) wraps to MinInt64 without this check
+	overflow := math.Float64bits(1e30)
+	data := []byte{
+		0x0B,
+		byte(overflow >> 56), byte(overflow >> 48), byte(overflow >> 40), byte(overflow >> 32),
+		byte(overflow >> 24), byte(overflow >> 16), byte(overflow >> 8), byte(overflow),
+		0x00, 0x00,
+	}
+	_, err := NewAMF0Decoder().Decode(data)
+	if err == nil {
+		t.Error("expected error for millis out of int64 range")
+	}
+}
+
 func TestDecodeAMF0_Date_NonZeroTimezone(t *testing.T) {
 	// AMF0 spec §2.13: timezone offset is deprecated and must be ignored
 	millis := 1_000.0
@@ -479,6 +528,15 @@ func TestDecodeAMF0_LongString_CustomMaxLen(t *testing.T) {
 	}
 }
 
+func TestDecodeAMF0_LongString_ZeroMaxLen(t *testing.T) {
+	d := NewAMF0Decoder()
+	d.SetMaxLongStringLen(0) // 0 = no limit
+	_, err := d.Decode([]byte{0x0c, 0x00, 0x00, 0x00, 0x05, 'h', 'e', 'l', 'l', 'o'})
+	if err != nil {
+		t.Fatalf("expected success with no limit, got %v", err)
+	}
+}
+
 func TestDecodeAMF0_LongString_MalformedShortData(t *testing.T) {
 	_, err := NewAMF0Decoder().Decode([]byte{0x0c, 0x00, 0x00, 0x00, 0x05, 'h', 'e', 'l'})
 	if err == nil {
@@ -486,25 +544,3 @@ func TestDecodeAMF0_LongString_MalformedShortData(t *testing.T) {
 	}
 }
 
-func BenchmarkDecodeAMF0_Number(b *testing.B) {
-	dec := NewAMF0Decoder()
-	data := []byte{0x00, 0x40, 0x09, 0x1e, 0xb8, 0x51, 0xeb, 0x85, 0x1f}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = dec.Decode(data)
-	}
-}
-
-func BenchmarkDecodeAMF0_Object(b *testing.B) {
-	dec := NewAMF0Decoder()
-	data := []byte{
-		0x03,
-		0x00, 0x04, 'n', 'a', 'm', 'e',
-		0x02, 0x00, 0x04, 't', 'e', 's', 't',
-		0x00, 0x00, 0x09,
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = dec.Decode(data)
-	}
-}

@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// AMF0Encoder is not safe for concurrent use.
 type AMF0Encoder struct {
 	buf bytes.Buffer
 }
@@ -20,6 +21,7 @@ func (e *AMF0Encoder) Encode(values ...any) ([]byte, error) {
 	e.buf.Reset()
 	for _, val := range values {
 		if err := e.encodeValue(val); err != nil {
+			e.buf.Reset()
 			return nil, err
 		}
 	}
@@ -107,7 +109,8 @@ func (e *AMF0Encoder) encodeECMAArray(arr ECMAArray) error {
 	b[0] = ecmaArrayMarker
 	binary.BigEndian.PutUint32(b[1:], uint32(len(arr)))
 	e.buf.Write(b[:])
-	return e.encodeProperties(map[string]any(arr))
+
+	return e.encodeProperties(arr)
 }
 
 func (e *AMF0Encoder) encodeObject(obj map[string]any) error {
@@ -133,6 +136,7 @@ func (e *AMF0Encoder) encodeObjectProperty(key string, val any) error {
 	if keyByteLen > 65535 {
 		return fmt.Errorf("object key too long: %d bytes (max 65535)", keyByteLen)
 	}
+
 	var b [2]byte
 	binary.BigEndian.PutUint16(b[:], uint16(keyByteLen))
 	e.buf.Write(b[:])
@@ -146,6 +150,7 @@ func (e *AMF0Encoder) encodeStrictArray(arr []any) error {
 	b[0] = strictArrayMarker
 	binary.BigEndian.PutUint32(b[1:], uint32(len(arr)))
 	e.buf.Write(b[:])
+
 	for _, v := range arr {
 		if err := e.encodeValue(v); err != nil {
 			return err

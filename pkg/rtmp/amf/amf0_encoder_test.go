@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-
 func TestAMF0Encoder_Reuse(t *testing.T) {
 	enc := NewAMF0Encoder()
 
@@ -224,6 +223,36 @@ func TestEncodeAMF0_LongString(t *testing.T) {
 	}
 }
 
+func TestEncodeAMF0_String_Boundary(t *testing.T) {
+	enc := NewAMF0Encoder()
+
+	// 65535 bytes: last valid short string
+	short := strings.Repeat("a", 65535)
+	data, err := enc.Encode(short)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != stringMarker {
+		t.Errorf("65535-byte string: expected stringMarker (0x%02x), got 0x%02x", stringMarker, data[0])
+	}
+	if data[1] != 0xFF || data[2] != 0xFF {
+		t.Errorf("65535-byte string: expected length bytes 0xFF 0xFF, got 0x%02x 0x%02x", data[1], data[2])
+	}
+
+	// 65536 bytes: first long string
+	long := strings.Repeat("a", 65536)
+	data, err = enc.Encode(long)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[0] != longStringMarker {
+		t.Errorf("65536-byte string: expected longStringMarker (0x%02x), got 0x%02x", longStringMarker, data[0])
+	}
+	if data[1] != 0x00 || data[2] != 0x01 || data[3] != 0x00 || data[4] != 0x00 {
+		t.Errorf("65536-byte string: expected length bytes 0x00 0x01 0x00 0x00, got %02x %02x %02x %02x", data[1], data[2], data[3], data[4])
+	}
+}
+
 func TestEncodeAMF0_Object(t *testing.T) {
 	obj := map[string]any{"foo": "bar"}
 	data, err := NewAMF0Encoder().Encode(obj)
@@ -293,7 +322,7 @@ func TestEncodeAMF0_ECMAArray_RoundTrip(t *testing.T) {
 }
 
 func TestEncodeAMF0_ECMAArray_MapDoesNotEncode(t *testing.T) {
-	// map[string]any는 Object(0x03)로 인코딩되어야 함
+	// map[string]any must be encoded as Object (0x03), not ECMAArray
 	data, err := NewAMF0Encoder().Encode(map[string]any{"key": "val"})
 	if err != nil {
 		t.Fatal(err)
@@ -430,7 +459,7 @@ func TestEncodeAMF0_Date(t *testing.T) {
 }
 
 func TestEncodeAMF0_Date_RoundTrip(t *testing.T) {
-	// time.Time round-trip은 AMF0가 밀리초 정밀도이므로 ms 단위까지만 보존됨
+	// AMF0 date has millisecond precision, so sub-ms components are lost in round-trip
 	original := time.Date(2023, 3, 28, 19, 40, 0, 123_000_000, time.UTC)
 	data, err := NewAMF0Encoder().Encode(original)
 	if err != nil {
@@ -578,22 +607,6 @@ func TestEncodeAMF0_NestedObject_RoundTrip(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeAMF0_Number(b *testing.B) {
-	enc := NewAMF0Encoder()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = enc.Encode(3.14)
-	}
-}
-
-func BenchmarkEncodeAMF0_String(b *testing.B) {
-	enc := NewAMF0Encoder()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = enc.Encode("hello world")
-	}
-}
-
 func TestEncodeAMF0_ECMAArray_Empty(t *testing.T) {
 	data, err := NewAMF0Encoder().Encode(ECMAArray{})
 	if err != nil {
@@ -603,18 +616,5 @@ func TestEncodeAMF0_ECMAArray_Empty(t *testing.T) {
 	expected := []byte{0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09}
 	if !bytes.Equal(data, expected) {
 		t.Errorf("expected %v, got %v", expected, data)
-	}
-}
-
-func BenchmarkEncodeAMF0_Object(b *testing.B) {
-	enc := NewAMF0Encoder()
-	obj := map[string]any{
-		"name":  "test",
-		"value": 123.45,
-		"flag":  true,
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = enc.Encode(obj)
 	}
 }
