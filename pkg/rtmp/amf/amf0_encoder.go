@@ -22,7 +22,7 @@ func (e *AMF0Encoder) Encode(values ...any) ([]byte, error) {
 	for _, val := range values {
 		if err := e.encodeValue(val); err != nil {
 			e.buf.Reset()
-			return nil, err
+			return nil, fmt.Errorf("AMF0 encode failed: %w", err)
 		}
 	}
 	result := make([]byte, e.buf.Len())
@@ -64,7 +64,7 @@ func (e *AMF0Encoder) encodeValue(value any) error {
 	case uint32:
 		e.writeNumber(float64(v))
 	case uint64:
-		e.writeNumber(float64(v))
+		e.writeNumber(float64(v)) // AMF0 Number is IEEE 754 double; values > 2^53 lose precision
 	case string:
 		e.encodeString(v)
 	case ECMAArray:
@@ -105,6 +105,7 @@ func (e *AMF0Encoder) encodeString(s string) {
 }
 
 func (e *AMF0Encoder) encodeECMAArray(arr ECMAArray) error {
+	// uint32(len(arr)) never truncates silently: ECMAArray with 4B+ entries requires >64GB memory, which is unreachable in practice
 	var b [5]byte
 	b[0] = ecmaArrayMarker
 	binary.BigEndian.PutUint32(b[1:], uint32(len(arr)))
@@ -162,7 +163,7 @@ func (e *AMF0Encoder) encodeStrictArray(arr []any) error {
 func (e *AMF0Encoder) encodeDate(t time.Time) {
 	var b [11]byte
 	b[0] = dateMarker
-	binary.BigEndian.PutUint64(b[1:], math.Float64bits(float64(t.UnixMilli())))
+	binary.BigEndian.PutUint64(b[1:], math.Float64bits(float64(t.UnixMilli()))) // AMF0 Number is IEEE 754 double; UnixMilli() values > 2^53 lose precision
 	// b[9:11] = 0x0000: timezone offset, deprecated and always 0 per AMF0 spec §2.13
 	e.buf.Write(b[:])
 }

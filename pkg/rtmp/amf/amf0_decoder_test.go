@@ -518,6 +518,27 @@ func TestDecodeAMF0_Date_NonZeroTimezone(t *testing.T) {
 	}
 }
 
+func TestDecodeAMF0_EmptyInput(t *testing.T) {
+	vals, err := NewAMF0Decoder().Decode([]byte{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vals) != 0 {
+		t.Errorf("expected empty slice, got %v", vals)
+	}
+}
+
+func TestDecodeAMF0_Boolean_NonStandardTruthy(t *testing.T) {
+	// AMF0 spec defines only 0x00/0x01, but any non-zero byte is treated as true
+	vals, err := NewAMF0Decoder().Decode([]byte{0x01, 0xFF})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !vals[0].(bool) {
+		t.Errorf("expected non-zero byte to be true")
+	}
+}
+
 func TestDecodeAMF0_LongString(t *testing.T) {
 	vals, err := NewAMF0Decoder().Decode([]byte{0x0c, 0x00, 0x00, 0x00, 0x05, 'h', 'e', 'l', 'l', 'o'})
 	if err != nil {

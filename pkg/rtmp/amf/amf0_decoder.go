@@ -3,7 +3,6 @@ package amf
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -18,7 +17,7 @@ const DefaultMaxLongStringLen uint32 = 64 * 1024 * 1024 // 64MB
 // AMF0Decoder is not safe for concurrent use.
 type AMF0Decoder struct {
 	r                bytes.Reader
-	buf              [decoderBufSize]byte // reused across reads to avoid heap escape via io.ReadFull's io.Reader interface chain
+	buf              [decoderBufSize]byte // scratch space for fixed-size field reads (float64/uint32/uint16); reused across decode calls
 	maxLongStringLen uint32
 }
 
@@ -88,7 +87,7 @@ func (d *AMF0Decoder) decodeAMF0() (any, error) {
 	case movieClipMarker, recordSetMarker:
 		return nil, fmt.Errorf("AMF0 reserved marker: 0x%02x", marker)
 	default:
-		return nil, fmt.Errorf("unknown AMF0 marker: 0x%x", marker)
+		return nil, fmt.Errorf("unknown AMF0 marker: 0x%02x", marker)
 	}
 }
 
@@ -164,7 +163,7 @@ func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
 			if b == objectEndMarker {
 				break
 			}
-			return nil, errors.New("expected object end marker")
+			return nil, fmt.Errorf("expected object end marker, got 0x%02x", b)
 		}
 		val, err := d.decodeAMF0()
 		if err != nil {

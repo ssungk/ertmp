@@ -33,6 +33,30 @@ func TestAMF0Encoder_Reuse(t *testing.T) {
 	}
 }
 
+func TestAMF0Encoder_MultipleValues(t *testing.T) {
+	data, err := NewAMF0Encoder().Encode("connect", 1.0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vals, err := NewAMF0Decoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vals) != 3 {
+		t.Fatalf("expected 3 values, got %d", len(vals))
+	}
+	if vals[0] != "connect" {
+		t.Errorf("expected 'connect', got %v", vals[0])
+	}
+	if vals[1] != 1.0 {
+		t.Errorf("expected 1.0, got %v", vals[1])
+	}
+	if vals[2] != nil {
+		t.Errorf("expected nil, got %v", vals[2])
+	}
+}
+
 func TestAMF0Encoder_Error(t *testing.T) {
 	enc := NewAMF0Encoder()
 	type unsupportedType struct{}
@@ -54,113 +78,22 @@ func TestEncodeAMF0_Number(t *testing.T) {
 	}
 }
 
-func TestEncodeValue_Float32(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(float32(3.14))
-	if err != nil {
-		t.Fatal(err)
+func TestEncodeValue_NumericTypes(t *testing.T) {
+	cases := []any{
+		float32(3.14), float64(3.14),
+		int(42), int8(42), int16(42), int32(42), int64(42),
+		uint(42), uint8(42), uint16(42), uint32(42), uint64(42),
 	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Int(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(int(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Int32(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(int32(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Int64(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(int64(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Uint(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(uint(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Uint32(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(uint32(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Uint64(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(uint64(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Int8(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(int8(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Int16(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(int16(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Uint8(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(uint8(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
-	}
-}
-
-func TestEncodeValue_Uint16(t *testing.T) {
-	data, err := NewAMF0Encoder().Encode(uint16(42))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data[0] != numberMarker {
-		t.Errorf("expected numberMarker, got 0x%02x", data[0])
+	for _, val := range cases {
+		t.Run(fmt.Sprintf("%T", val), func(t *testing.T) {
+			data, err := NewAMF0Encoder().Encode(val)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if data[0] != numberMarker {
+				t.Errorf("expected numberMarker, got 0x%02x", data[0])
+			}
+		})
 	}
 }
 
@@ -500,11 +433,13 @@ func TestEncodeAMF0_RoundTrip(t *testing.T) {
 		"hello world",
 		nil,
 		[]any{1.0, 2.0, 3.0},
+		[]any{nil, "a", nil},
 		map[string]any{
 			"name":  "test",
 			"value": 123.45,
 			"flag":  true,
 		},
+		map[string]any{"key": nil},
 	}
 
 	for i, original := range testCases {
