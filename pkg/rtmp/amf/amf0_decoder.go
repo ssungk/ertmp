@@ -12,29 +12,35 @@ import (
 // decoderBufSize is the largest fixed-size field in AMF0 (float64 / date millis = 8 bytes).
 const decoderBufSize = 8
 
-const DefaultMaxLongStringLen uint32 = 64 * 1024 * 1024 // 64MB
+// DefaultLongStrLimit is the default maximum byte length for AMF0 long strings (64MB).
+const DefaultLongStrLimit uint32 = 64 * 1024 * 1024 // 64MB
 
-// AMF0Decoder is not safe for concurrent use.
+// AMF0Decoder decodes AMF0-encoded byte slices into Go values.
+// It is not safe for concurrent use.
 type AMF0Decoder struct {
-	r                bytes.Reader
-	buf              [decoderBufSize]byte // scratch space for fixed-size field reads (float64/uint32/uint16); reused across decode calls
-	maxLongStringLen uint32
+	r            bytes.Reader
+	buf          [decoderBufSize]byte // scratch space for fixed-size field reads (float64/uint32/uint16); reused across decode calls
+	longStrLimit uint32
 }
 
+// NewAMF0Decoder returns a new AMF0Decoder with the default long string limit (64MB).
 func NewAMF0Decoder() *AMF0Decoder {
-	return &AMF0Decoder{maxLongStringLen: DefaultMaxLongStringLen}
+	return &AMF0Decoder{longStrLimit: DefaultLongStrLimit}
 }
 
-func (d *AMF0Decoder) MaxLongStringLen() uint32 {
-	return d.maxLongStringLen
+// LongStrLimit returns the current maximum allowed long string length in bytes.
+// A value of 0 means no limit.
+func (d *AMF0Decoder) LongStrLimit() uint32 {
+	return d.longStrLimit
 }
 
-// SetMaxLongStringLen sets the maximum allowed long string length in bytes.
+// SetLongStrLimit sets the maximum allowed long string length in bytes.
 // A value of 0 means no limit. Default is 64MB.
-func (d *AMF0Decoder) SetMaxLongStringLen(n uint32) {
-	d.maxLongStringLen = n
+func (d *AMF0Decoder) SetLongStrLimit(n uint32) {
+	d.longStrLimit = n
 }
 
+// Decode parses AMF0-encoded data and returns the decoded values.
 func (d *AMF0Decoder) Decode(data []byte) ([]any, error) {
 	d.r.Reset(data)
 	values := make([]any, 0, 5)
@@ -123,8 +129,8 @@ func (d *AMF0Decoder) decodeLongString() (string, error) {
 		return "", err
 	}
 	length := binary.BigEndian.Uint32(d.buf[:4])
-	if d.maxLongStringLen > 0 && length > d.maxLongStringLen {
-		return "", fmt.Errorf("long string too large: %d bytes (max %d)", length, d.maxLongStringLen)
+	if d.longStrLimit > 0 && length > d.longStrLimit {
+		return "", fmt.Errorf("long string too large: %d bytes (max %d)", length, d.longStrLimit)
 	}
 
 	buf := make([]byte, length)
@@ -139,11 +145,7 @@ func (d *AMF0Decoder) decodeECMAArray() (ECMAArray, error) {
 	if _, err := io.ReadFull(&d.r, d.buf[:4]); err != nil {
 		return nil, err
 	}
-	m, err := d.decodeObject()
-	if err != nil {
-		return nil, err
-	}
-	return m, nil
+	return d.decodeObject()
 }
 
 func (d *AMF0Decoder) decodeObject() (map[string]any, error) {
